@@ -88,12 +88,14 @@ struct ParticleView: View {
                 y: spawn.offset.height + yOffset
             )
             .onAppear {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.72)) {
                     scale = 1.0
                 }
-                withAnimation(.easeOut(duration: spawn.lifetime)) {
+                withAnimation(.easeOut(duration: spawn.lifetime * 0.9)) {
                     yOffset = -38
                     xOffset = spawn.driftX
+                }
+                withAnimation(.easeIn(duration: spawn.lifetime)) {
                     opacity = 0
                 }
             }

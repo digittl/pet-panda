@@ -53,6 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Show/Hide Panda", action: #selector(togglePanda), keyEquivalent: "p"))
         menu.addItem(NSMenuItem(title: "Pet Panda", action: #selector(petPanda), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Wave Hello", action: #selector(waveHello), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Dance", action: #selector(danceNow), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Walk Now", action: #selector(walkNow), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Feed Bamboo", action: #selector(feedBamboo), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Reset Position", action: #selector(resetPosition), keyEquivalent: "r"))
@@ -125,6 +127,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func petPanda() {
         pandaWindowController?.viewModel.pet()
+    }
+
+    @objc private func waveHello() {
+        pandaWindowController?.viewModel.waveHello()
+    }
+
+    @objc private func danceNow() {
+        pandaWindowController?.viewModel.danceNow()
     }
 
     @objc private func walkNow() {
