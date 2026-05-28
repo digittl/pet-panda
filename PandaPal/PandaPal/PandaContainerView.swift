@@ -25,6 +25,27 @@ struct PandaContainerView: View {
         }
         .frame(width: 180 * viewModel.size.multiplier, height: 200 * viewModel.size.multiplier)
         .contentShape(Rectangle())
+        .contextMenu {
+            Button("Pet") {
+                viewModel.pet()
+            }
+
+            Button("Walk") {
+                viewModel.forceWander()
+            }
+
+            Button("Feed") {
+                viewModel.feedBamboo()
+            }
+
+            Menu("Size") {
+                ForEach(PandaSize.allCases, id: \.self) { size in
+                    Button(size.label + (viewModel.size == size ? " (Current)" : "")) {
+                        viewModel.requestSize(size)
+                    }
+                }
+            }
+        }
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
@@ -78,7 +99,9 @@ struct ParticleView: View {
 
     var body: some View {
         Text(spawn.particle.glyph)
-            .font(.system(size: 18))
+            .font(.system(size: 18, weight: .semibold))
+            .shadow(color: Color.white.opacity(0.7), radius: 2, x: 0, y: 0)
+            .shadow(color: Color.black.opacity(0.18), radius: 2, x: 0, y: 1)
             .scaleEffect(scale)
             .opacity(opacity)
             .offset(

@@ -4,13 +4,27 @@ struct PandaView: View {
     @ObservedObject var viewModel: PandaViewModel
 
     private let bodyFill = LinearGradient(
-        colors: [Color(white: 1.0), Color(white: 0.94)],
-        startPoint: .top,
-        endPoint: .bottom
+        colors: [
+            Color(red: 1.0, green: 1.0, blue: 0.98),
+            Color(red: 0.97, green: 0.96, blue: 0.92),
+            Color(red: 0.9, green: 0.9, blue: 0.86)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
     )
 
     private let darkFill = LinearGradient(
-        colors: [Color(white: 0.22), Color(white: 0.08)],
+        colors: [
+            Color(red: 0.18, green: 0.18, blue: 0.17),
+            Color(red: 0.04, green: 0.045, blue: 0.05)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    private let outline = Color(red: 0.05, green: 0.05, blue: 0.05).opacity(0.85)
+    private let muzzleFill = LinearGradient(
+        colors: [Color.white.opacity(0.96), Color(red: 0.92, green: 0.91, blue: 0.86)],
         startPoint: .top,
         endPoint: .bottom
     )
@@ -35,30 +49,39 @@ struct PandaView: View {
 
             // Soft drop shadow under the panda
             Ellipse()
-                .fill(Color.black.opacity(0.18))
-                .frame(width: 70, height: 8)
-                .blur(radius: 3)
+                .fill(Color.black.opacity(0.2))
+                .frame(width: 76, height: 10)
+                .blur(radius: 4)
                 .offset(y: 62)
                 .scaleEffect(x: viewModel.shadowScale, y: 1, anchor: .center)
 
             // Body
             Ellipse()
                 .fill(bodyFill)
-                .frame(width: 64, height: 74)
+                .frame(width: 66, height: 76)
                 .offset(y: 20)
+                .shadow(color: Color.white.opacity(0.55), radius: 4, x: -2, y: -3)
+                .shadow(color: Color.black.opacity(0.14), radius: 4, x: 1.5, y: 2.5)
                 .overlay(
                     Ellipse()
-                        .stroke(Color(white: 0.15), lineWidth: 2)
-                        .frame(width: 64, height: 74)
+                        .stroke(outline, lineWidth: 1.8)
+                        .frame(width: 66, height: 76)
                         .offset(y: 20)
                 )
 
             // Belly highlight (subtle lighter spot)
             Ellipse()
-                .fill(Color.white.opacity(0.7))
-                .frame(width: 30, height: 36)
-                .offset(x: -4, y: 22)
-                .blur(radius: 4)
+                .fill(
+                    RadialGradient(
+                        colors: [Color.white.opacity(0.85), Color.white.opacity(0.08)],
+                        center: .topLeading,
+                        startRadius: 2,
+                        endRadius: 24
+                    )
+                )
+                .frame(width: 34, height: 40)
+                .offset(x: -6, y: 18)
+                .blur(radius: 2.5)
 
             // Legs — normal stance when standing, crossed lotus when sitting
             if viewModel.sitting {
@@ -85,6 +108,7 @@ struct PandaView: View {
                 BambooStick()
                     .offset(x: 0, y: -2)
                     .rotationEffect(.degrees(viewModel.bambooTilt))
+                    .scaleEffect(viewModel.bambooScale)
                     .transition(.scale.combined(with: .opacity))
             }
 
@@ -108,13 +132,22 @@ struct PandaView: View {
             // Head shape
             Circle()
                 .fill(bodyFill)
-                .frame(width: 68, height: 68)
+                .frame(width: 70, height: 70)
                 .offset(y: -12)
+                .shadow(color: Color.white.opacity(0.6), radius: 4, x: -2, y: -3)
+                .shadow(color: Color.black.opacity(0.12), radius: 5, x: 1.5, y: 2)
                 .overlay(
                     Circle()
-                        .stroke(Color(white: 0.15), lineWidth: 2)
-                        .frame(width: 68, height: 68)
+                        .stroke(outline, lineWidth: 1.8)
+                        .frame(width: 70, height: 70)
                         .offset(y: -12)
+                )
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.55), lineWidth: 1)
+                        .frame(width: 62, height: 62)
+                        .offset(x: -3, y: -17)
+                        .blur(radius: 1.2)
                 )
 
             // Eye patches
@@ -138,6 +171,18 @@ struct PandaView: View {
                 .offset(x: 22, y: -2)
                 .blur(radius: 1)
 
+            // Soft muzzle keeps the mouth crisp against the face.
+            Ellipse()
+                .fill(muzzleFill)
+                .frame(width: 28, height: 20)
+                .offset(y: 2)
+                .overlay(
+                    Ellipse()
+                        .stroke(Color.black.opacity(0.08), lineWidth: 0.8)
+                        .frame(width: 28, height: 20)
+                        .offset(y: 2)
+                )
+
             // Nose
             ZStack {
                 Ellipse()
@@ -159,10 +204,26 @@ struct PandaView: View {
         ZStack {
             Circle()
                 .fill(darkFill)
-                .frame(width: 24, height: 24)
+                .frame(width: 25, height: 25)
+                .overlay(
+                    Circle()
+                        .stroke(outline, lineWidth: 1.2)
+                )
+                .shadow(color: Color.black.opacity(0.18), radius: 2, x: 0, y: 1)
             Circle()
-                .fill(Color.pink.opacity(0.4))
-                .frame(width: 11, height: 11)
+                .fill(
+                    RadialGradient(
+                        colors: [Color.pink.opacity(0.5), Color.pink.opacity(0.18)],
+                        center: .topLeading,
+                        startRadius: 1,
+                        endRadius: 8
+                    )
+                )
+                .frame(width: 12, height: 12)
+            Circle()
+                .fill(Color.white.opacity(0.12))
+                .frame(width: 8, height: 4)
+                .offset(x: -4, y: -5)
         }
         .offset(x: 23 * side, y: -38 + (viewModel.earWiggle * (side == -1 ? 1 : -1)))
     }
@@ -170,8 +231,15 @@ struct PandaView: View {
     private func eyePatch(side: CGFloat) -> some View {
         Ellipse()
             .fill(darkFill)
-            .frame(width: 22, height: 24)
+            .frame(width: 23, height: 25)
             .rotationEffect(.degrees(side == -1 ? -15 : 15))
+            .overlay(
+                Ellipse()
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    .frame(width: 18, height: 20)
+                    .rotationEffect(.degrees(side == -1 ? -15 : 15))
+                    .offset(x: -2 * side, y: -2)
+            )
             .offset(x: 13 * side + viewModel.lookDirection * 0.3, y: -14)
     }
 
@@ -239,6 +307,10 @@ struct PandaView: View {
                 Ellipse()
                     .fill(Color(red: 0.95, green: 0.45, blue: 0.5))
                     .frame(width: 12, height: 9)
+                    .overlay(
+                        Ellipse()
+                            .stroke(Color(white: 0.12), lineWidth: 1)
+                    )
                 Ellipse()
                     .fill(Color(red: 1.0, green: 0.7, blue: 0.75))
                     .frame(width: 6, height: 3)
@@ -246,16 +318,19 @@ struct PandaView: View {
             }
             .offset(y: 4)
         case .grin:
-            GrinPath()
-                .fill(Color(red: 0.95, green: 0.45, blue: 0.5))
-                .frame(width: 16, height: 8)
-                .offset(y: 4)
-                .overlay(
-                    GrinPath()
-                        .stroke(Color(white: 0.15), lineWidth: 1.4)
-                        .frame(width: 16, height: 8)
-                        .offset(y: 4)
-                )
+            ZStack {
+                GrinPath()
+                    .fill(Color(red: 0.95, green: 0.45, blue: 0.5))
+                    .frame(width: 17, height: 8)
+                Capsule()
+                    .fill(Color.white.opacity(0.85))
+                    .frame(width: 12, height: 2)
+                    .offset(y: -1)
+                GrinPath()
+                    .stroke(Color(white: 0.15), lineWidth: 1.4)
+                    .frame(width: 17, height: 8)
+            }
+            .offset(y: 4)
         case .ohh:
             Circle()
                 .fill(Color(red: 0.9, green: 0.4, blue: 0.45))
@@ -270,10 +345,27 @@ struct PandaView: View {
     }
 
     private func leg(side: CGFloat) -> some View {
-        Ellipse()
-            .fill(darkFill)
-            .frame(width: 24, height: 20)
-            .offset(x: 14 * side, y: 54)
+        let isLeading = side == viewModel.leadingPawSide
+        let stride = viewModel.walkStride * side * viewModel.walkDirection
+        let lift = isLeading ? viewModel.walkFootLift : 0
+
+        return ZStack {
+            Ellipse()
+                .fill(darkFill)
+                .frame(width: 25, height: 20)
+                .overlay(
+                    Ellipse()
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                        .frame(width: 20, height: 15)
+                        .offset(x: -2 * side, y: -2)
+                )
+
+            Circle()
+                .fill(Color.pink.opacity(0.5))
+                .frame(width: 5, height: 4)
+                .offset(x: -3 * side, y: 2)
+        }
+        .offset(x: 14 * side + stride, y: 54 - lift)
     }
 
     private func arm(side: CGFloat, raised: Bool, wave: Double) -> some View {
@@ -286,11 +378,25 @@ struct PandaView: View {
         let clampedWave = max(-25, min(25, wave))
         let angle = base + clampedWave
 
-        return Ellipse()
-            .fill(darkFill)
-            .frame(width: 18, height: 30)
-            .rotationEffect(.degrees(angle), anchor: UnitPoint(x: 0.5, y: 0.15))
-            .offset(x: 30 * side, y: raised ? 6 : 16)
+        return ZStack {
+            Capsule()
+                .fill(darkFill)
+                .frame(width: 18, height: 32)
+                .overlay(
+                    Capsule()
+                        .fill(Color.white.opacity(0.12))
+                        .frame(width: 4, height: 20)
+                        .offset(x: -4 * side, y: -4)
+                        .blur(radius: 0.5)
+                )
+
+            Circle()
+                .fill(Color.pink.opacity(0.38))
+                .frame(width: 7, height: 5)
+                .offset(y: 12)
+        }
+        .rotationEffect(.degrees(angle), anchor: UnitPoint(x: 0.5, y: 0.15))
+        .offset(x: 30 * side, y: raised ? 6 : 16)
     }
 }
 
@@ -485,26 +591,67 @@ struct BambooStick: View {
         ZStack {
             RoundedRectangle(cornerRadius: 3)
                 .fill(LinearGradient(
-                    colors: [Color(red: 0.55, green: 0.78, blue: 0.35), Color(red: 0.35, green: 0.6, blue: 0.2)],
-                    startPoint: .top,
-                    endPoint: .bottom
+                    colors: [
+                        Color(red: 0.78, green: 0.9, blue: 0.38),
+                        Color(red: 0.45, green: 0.72, blue: 0.22),
+                        Color(red: 0.25, green: 0.5, blue: 0.14)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
                 ))
-                .frame(width: 8, height: 36)
+                .frame(width: 9, height: 38)
+                .shadow(color: Color.black.opacity(0.18), radius: 2, x: 1, y: 1)
                 .overlay(
                     VStack(spacing: 8) {
-                        Capsule().fill(Color(red: 0.25, green: 0.45, blue: 0.15)).frame(height: 1.5)
-                        Capsule().fill(Color(red: 0.25, green: 0.45, blue: 0.15)).frame(height: 1.5)
-                        Capsule().fill(Color(red: 0.25, green: 0.45, blue: 0.15)).frame(height: 1.5)
+                        Capsule().fill(Color(red: 0.22, green: 0.42, blue: 0.12)).frame(height: 1.5)
+                        Capsule().fill(Color(red: 0.22, green: 0.42, blue: 0.12)).frame(height: 1.5)
+                        Capsule().fill(Color(red: 0.22, green: 0.42, blue: 0.12)).frame(height: 1.5)
                     }
-                    .frame(width: 8)
+                    .frame(width: 9)
+                )
+                .overlay(
+                    Capsule()
+                        .fill(Color.white.opacity(0.28))
+                        .frame(width: 2, height: 32)
+                        .offset(x: -2)
                 )
 
-            // Leaf
-            Ellipse()
-                .fill(Color(red: 0.5, green: 0.8, blue: 0.3))
-                .frame(width: 14, height: 6)
+            BambooLeaf()
+                .fill(LinearGradient(
+                    colors: [Color(red: 0.64, green: 0.88, blue: 0.32), Color(red: 0.28, green: 0.58, blue: 0.16)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ))
+                .frame(width: 18, height: 9)
                 .rotationEffect(.degrees(-35))
-                .offset(x: 8, y: -16)
+                .offset(x: 9, y: -16)
+
+            BambooLeaf()
+                .fill(LinearGradient(
+                    colors: [Color(red: 0.56, green: 0.8, blue: 0.28), Color(red: 0.24, green: 0.52, blue: 0.14)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ))
+                .frame(width: 15, height: 8)
+                .rotationEffect(.degrees(145))
+                .offset(x: -8, y: -4)
         }
+    }
+}
+
+struct BambooLeaf: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.midY),
+            control: CGPoint(x: rect.midX, y: rect.minY - rect.height * 0.35)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.midY),
+            control: CGPoint(x: rect.midX, y: rect.maxY + rect.height * 0.35)
+        )
+        path.closeSubpath()
+        return path
     }
 }
