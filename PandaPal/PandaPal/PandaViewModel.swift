@@ -96,6 +96,7 @@ final class PandaViewModel: ObservableObject {
     @Published var size: PandaSize = .medium
     @Published var sitting: Bool = false
     @Published var cushionVisible: Bool = false
+    @Published var pawsInLap: Bool = false
 
     @Published var particles: [PandaParticleSpawn] = []
 
@@ -248,7 +249,7 @@ final class PandaViewModel: ObservableObject {
 
     private func scheduleNextWander(initial: Bool = false) {
         wanderTimer?.invalidate()
-        let delay = initial ? Double.random(in: 1...3) : Double.random(in: 4...9)
+        let delay = initial ? Double.random(in: 4...8) : Double.random(in: 25...55)
         let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
             self?.wander()
         }
@@ -299,6 +300,7 @@ final class PandaViewModel: ObservableObject {
             dragSway = 0
             sitting = false
             cushionVisible = false
+            pawsInLap = false
         }
     }
 
@@ -706,118 +708,179 @@ final class PandaViewModel: ObservableObject {
     }
 
     private func idleSit() {
-        withAnimation(.spring(response: 0.55, dampingFraction: 0.7)) {
+        // Settle into zen lotus pose
+        withAnimation(.spring(response: 0.7, dampingFraction: 0.75)) {
             cushionVisible = true
             sitting = true
-            bodyOffsetY = 14
-            squashScale = 0.94
+            pawsInLap = true
+            bodyOffsetY = 16
+            squashScale = 0.92
             mouthShape = .smile
         }
-        // Sit a while
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                self.headTilt = -8
-                self.lookVertical = -4
+
+        let sitDuration = Double.random(in: 18...28)
+
+        // Occasional gentle head turns while sitting — zen contemplation
+        let look1 = sitDuration * 0.25
+        let look2 = sitDuration * 0.5
+        let look3 = sitDuration * 0.75
+        DispatchQueue.main.asyncAfter(deadline: .now() + look1) {
+            withAnimation(.easeInOut(duration: 1.2)) {
+                self.headTilt = -5
+                self.lookVertical = -3
+                self.eyesClosed = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    self.eyesClosed = false
+                }
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.5) {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                self.headTilt = 6
-                self.lookVertical = 4
+        DispatchQueue.main.asyncAfter(deadline: .now() + look2) {
+            withAnimation(.easeInOut(duration: 1.2)) {
+                self.headTilt = 5
+                self.lookVertical = 3
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 7.0) {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + look3) {
+            withAnimation(.easeInOut(duration: 1.2)) {
+                self.headTilt = 0
+                self.lookVertical = 0
+                self.eyesClosed = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    self.eyesClosed = false
+                }
+            }
+        }
+
+        // Stand back up
+        DispatchQueue.main.asyncAfter(deadline: .now() + sitDuration) {
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.75)) {
                 self.sitting = false
                 self.cushionVisible = false
+                self.pawsInLap = false
                 self.bodyOffsetY = 0
                 self.squashScale = 1.0
                 self.headTilt = 0
                 self.lookVertical = 0
+                self.eyesClosed = false
             }
             self.finishAnimation()
         }
     }
 
     private func idleNapOnCushion() {
-        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+        // Settle down, fold legs, drift off
+        withAnimation(.spring(response: 0.7, dampingFraction: 0.8)) {
             cushionVisible = true
             sitting = true
-            bodyOffsetY = 14
-            squashScale = 0.92
+            pawsInLap = true
+            bodyOffsetY = 16
+            squashScale = 0.9
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-            withAnimation(.easeInOut(duration: 0.5)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            withAnimation(.easeInOut(duration: 0.8)) {
                 self.eyesClosed = true
                 self.mouthShape = .smile
-                self.headTilt = 8
+                self.headTilt = 10
             }
         }
 
+        // Long, slow breathing with occasional 💤
+        let napBreaths = Int.random(in: 14...22)
         var breaths = 0
-        let timer = Timer.scheduledTimer(withTimeInterval: 1.4, repeats: true) { [weak self] timer in
+        let timer = Timer(timeInterval: 1.8, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
-            withAnimation(.easeInOut(duration: 1.2)) {
-                self.bodyOffsetY = breaths % 2 == 0 ? 16 : 13
-                self.squashScale = breaths % 2 == 0 ? 0.9 : 0.94
+            withAnimation(.easeInOut(duration: 1.6)) {
+                self.bodyOffsetY = breaths % 2 == 0 ? 18 : 14
+                self.squashScale = breaths % 2 == 0 ? 0.88 : 0.92
             }
-            self.spawnParticle(.zzz, at: CGSize(width: 26, height: -34))
+            // Spawn 💤 every few breaths, not every one — feels less spammy
+            if breaths % 3 == 0 {
+                self.spawnParticle(.zzz, at: CGSize(width: 28, height: -34))
+            }
             breaths += 1
-            if breaths >= 5 {
+            if breaths >= napBreaths {
                 timer.invalidate()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                // Slowly wake
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    withAnimation(.easeInOut(duration: 0.6)) {
+                        self.eyesClosed = true
+                        self.headTilt = -2
+                    }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
                     withAnimation(.easeInOut(duration: 0.5)) {
                         self.eyesClosed = false
+                        self.mouthShape = .yawn
+                        self.squashScale = 0.95
+                    }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        self.mouthShape = .smile
                         self.headTilt = 0
                     }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                            self.sitting = false
-                            self.cushionVisible = false
-                            self.bodyOffsetY = 0
-                            self.squashScale = 1.0
-                        }
-                        self.finishAnimation()
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.4) {
+                    withAnimation(.spring(response: 0.6, dampingFraction: 0.75)) {
+                        self.sitting = false
+                        self.cushionVisible = false
+                        self.pawsInLap = false
+                        self.bodyOffsetY = 0
+                        self.squashScale = 1.0
                     }
+                    self.finishAnimation()
                 }
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
         registerTimer(timer)
     }
 
     private func idleRelax() {
-        // Lean back on cushion, hands kind of up
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+        // Sit zen, slow blush + occasional heart
+        withAnimation(.spring(response: 0.7, dampingFraction: 0.75)) {
             cushionVisible = true
             sitting = true
-            bodyOffsetY = 14
-            squashScale = 0.95
-            leftArmRaised = true
-            rightArmRaised = true
-            leftArmWave = -15
-            rightArmWave = 15
-            headTilt = -4
+            pawsInLap = true
+            bodyOffsetY = 16
+            squashScale = 0.92
+            headTilt = -3
             mouthShape = .smile
             blushVisible = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            self.spawnParticle(.heart, at: CGSize(width: 18, height: -28))
+
+        let relaxDuration = Double.random(in: 14...20)
+
+        // Drift the head gently
+        DispatchQueue.main.asyncAfter(deadline: .now() + relaxDuration * 0.25) {
+            withAnimation(.easeInOut(duration: 1.5)) { self.headTilt = 4 }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            withAnimation(.easeInOut(duration: 0.5)) {
-                self.headTilt = 4
+        DispatchQueue.main.asyncAfter(deadline: .now() + relaxDuration * 0.5) {
+            withAnimation(.easeInOut(duration: 1.5)) { self.headTilt = -4 }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + relaxDuration * 0.75) {
+            withAnimation(.easeInOut(duration: 1.5)) { self.headTilt = 2 }
+        }
+
+        // Hearts drift up occasionally
+        let beats = 4
+        for i in 0..<beats {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0 + Double(i) * (relaxDuration / Double(beats))) {
+                self.spawnParticle(.heart, at: CGSize(width: CGFloat.random(in: -16...16), height: -28))
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + relaxDuration) {
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.75)) {
                 self.sitting = false
                 self.cushionVisible = false
+                self.pawsInLap = false
                 self.bodyOffsetY = 0
                 self.squashScale = 1.0
-                self.leftArmRaised = false
-                self.rightArmRaised = false
-                self.leftArmWave = 0
-                self.rightArmWave = 0
                 self.headTilt = 0
                 self.blushVisible = false
             }

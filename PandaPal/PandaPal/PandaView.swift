@@ -60,15 +60,25 @@ struct PandaView: View {
                 .offset(x: -4, y: 22)
                 .blur(radius: 4)
 
-            // Legs (hidden while sitting on the cushion — looks tucked in)
-            if !viewModel.sitting {
+            // Legs — normal stance when standing, crossed lotus when sitting
+            if viewModel.sitting {
+                CrossedLegs()
+                    .offset(y: 46)
+                    .transition(.scale.combined(with: .opacity))
+            } else {
                 leg(side: -1)
                 leg(side: 1)
             }
 
-            // Arms
-            arm(side: -1, raised: viewModel.leftArmRaised, wave: viewModel.leftArmWave)
-            arm(side: 1, raised: viewModel.rightArmRaised, wave: viewModel.rightArmWave)
+            // Arms — folded together in lap when zen, otherwise normal
+            if viewModel.pawsInLap {
+                PawsInLap()
+                    .offset(y: 30)
+                    .transition(.opacity)
+            } else {
+                arm(side: -1, raised: viewModel.leftArmRaised, wave: viewModel.leftArmWave)
+                arm(side: 1, raised: viewModel.rightArmRaised, wave: viewModel.rightArmWave)
+            }
 
             // Bamboo (held during eating)
             if viewModel.bambooVisible {
@@ -319,6 +329,84 @@ struct GrinPath: Shape {
         path.addLine(to: CGPoint(x: rect.minX, y: rect.midY))
         path.closeSubpath()
         return path
+    }
+}
+
+struct CrossedLegs: View {
+    private let darkFill = LinearGradient(
+        colors: [Color(white: 0.22), Color(white: 0.08)],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+
+    var body: some View {
+        ZStack {
+            // Back leg (crossed under) — slightly behind, tilted right
+            Capsule()
+                .fill(darkFill)
+                .frame(width: 14, height: 38)
+                .rotationEffect(.degrees(75))
+                .offset(x: -6, y: 2)
+
+            // Front leg — crossed over, tilted left
+            Capsule()
+                .fill(darkFill)
+                .frame(width: 14, height: 40)
+                .rotationEffect(.degrees(-75))
+                .offset(x: 6, y: 0)
+
+            // Foot pads peeking out at the knees
+            Circle()
+                .fill(LinearGradient(
+                    colors: [Color(white: 0.3), Color(white: 0.1)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ))
+                .frame(width: 11, height: 9)
+                .offset(x: -22, y: -2)
+
+            Circle()
+                .fill(LinearGradient(
+                    colors: [Color(white: 0.3), Color(white: 0.1)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ))
+                .frame(width: 11, height: 9)
+                .offset(x: 22, y: -2)
+
+            // Tiny pink pads on the feet
+            Circle().fill(Color.pink.opacity(0.55)).frame(width: 3, height: 2.5).offset(x: -22, y: -2)
+            Circle().fill(Color.pink.opacity(0.55)).frame(width: 3, height: 2.5).offset(x: 22, y: -2)
+        }
+    }
+}
+
+struct PawsInLap: View {
+    private let darkFill = LinearGradient(
+        colors: [Color(white: 0.22), Color(white: 0.08)],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+
+    var body: some View {
+        ZStack {
+            // Two paws clasped together in the center of the lap
+            Ellipse()
+                .fill(darkFill)
+                .frame(width: 16, height: 12)
+                .offset(x: -5)
+
+            Ellipse()
+                .fill(darkFill)
+                .frame(width: 16, height: 12)
+                .offset(x: 5)
+
+            // Subtle highlight on top
+            Capsule()
+                .fill(Color.white.opacity(0.18))
+                .frame(width: 14, height: 2)
+                .offset(y: -3)
+        }
     }
 }
 
