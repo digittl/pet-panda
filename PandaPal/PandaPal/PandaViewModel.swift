@@ -313,7 +313,7 @@ final class PandaViewModel: ObservableObject {
 
     private func scheduleNextWander(initial: Bool = false) {
         wanderTimer?.invalidate()
-        let delay = initial ? Double.random(in: 2.0...4.0) : Double.random(in: 10...20)
+        let delay = initial ? Double.random(in: 1.5...3.0) : Double.random(in: 8...16)
         let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
             self?.wander()
         }
@@ -379,11 +379,12 @@ final class PandaViewModel: ObservableObject {
         guard !isBusy else { return }
         isBusy = true
 
-        let pool: [() -> Void] = [
+        // Repeat the light idles so they fire more often than the heavyweight
+        // ones (especially the nap, which holds the panda still for a while).
+        let light: [() -> Void] = [
             { self.idleBlink() },
             { self.idleDoubleBlink() },
             { self.idleWave() },
-            { self.idleSleep() },
             { self.idleStretch() },
             { self.idleLookAround() },
             { self.idleYawn() },
@@ -392,18 +393,24 @@ final class PandaViewModel: ObservableObject {
             { self.idleSneeze() },
             { self.idleHumTune() },
             { self.idleBounce() },
-            { self.idleSit() },
-            { self.idleNapOnCushion() },
-            { self.idleRelax() },
             { self.idleTikTokDance() }
         ]
+        // idleSleep removed — napping always uses the cushion via
+        // idleNapOnCushion so she's never sleeping standing on bare floor.
+        let occasional: [() -> Void] = [
+            { self.idleSit() },
+            { self.idleRelax() },
+            { self.idleNapOnCushion() }
+        ]
+
+        let pool = light + light + occasional
         pool.randomElement()?()
     }
 
     private func idleTikTokDance() {
         let moves = 14
         var step = 0
-        let stepInterval = 0.42
+        let stepInterval = 0.63
 
         withAnimation(.easeInOut(duration: 0.35)) {
             mouthShape = .grin
@@ -607,7 +614,7 @@ final class PandaViewModel: ObservableObject {
             mouthShape = .grin
         }
         var waves = 0
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.28, repeats: true) { [weak self] timer in
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.42, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             waves += 1
             withAnimation(.easeInOut(duration: 0.22)) {
@@ -637,7 +644,7 @@ final class PandaViewModel: ObservableObject {
         }
 
         var breaths = 0
-        let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+        let timer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             withAnimation(.easeInOut(duration: 0.9)) {
                 self.bodyOffsetY = breaths % 2 == 0 ? 6 : 4
@@ -721,7 +728,7 @@ final class PandaViewModel: ObservableObject {
 
     private func idleEarWiggle() {
         var i = 0
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] timer in
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.225, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             withAnimation(.easeInOut(duration: 0.14)) {
                 self.earWiggle = i % 2 == 0 ? 3 : -3
@@ -762,7 +769,7 @@ final class PandaViewModel: ObservableObject {
 
         var chomps = 0
         let maxChomps = celebratory ? 8 : 6
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.26, repeats: true) { [weak self] timer in
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.39, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             chomps += 1
             let biteIn = chomps % 2 != 0
@@ -883,7 +890,7 @@ final class PandaViewModel: ObservableObject {
             mouthShape = .ohh
         }
         var i = 0
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] timer in
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             withAnimation(.easeInOut(duration: 0.35)) {
                 self.headTilt = i % 2 == 0 ? 6 : -6
@@ -906,7 +913,7 @@ final class PandaViewModel: ObservableObject {
 
     private func idleBounce() {
         var i = 0
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] timer in
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.375, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             withAnimation(.spring(response: 0.22, dampingFraction: 0.5)) {
                 self.bodyOffsetY = -10
@@ -1000,26 +1007,22 @@ final class PandaViewModel: ObservableObject {
     }
 
     private func idleNapOnCushion() {
-        // Settle down, fold legs, drift off
+        // Settle down, fold legs, eyes shut almost immediately.
         withAnimation(.spring(response: 0.7, dampingFraction: 0.8)) {
             cushionVisible = true
             sitting = true
             pawsInLap = true
             bodyOffsetY = 16
             squashScale = 0.9
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            withAnimation(.easeInOut(duration: 0.8)) {
-                self.eyesClosed = true
-                self.mouthShape = .smile
-                self.headTilt = 10
-            }
+            eyesClosed = true
+            mouthShape = .smile
+            headTilt = 10
         }
 
         // Long, slow breathing with occasional 💤
-        let napBreaths = Int.random(in: 14...22)
+        let napBreaths = Int.random(in: 70...110)
         var breaths = 0
-        let timer = Timer(timeInterval: 1.8, repeats: true) { [weak self] timer in
+        let timer = Timer(timeInterval: 2.7, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             withAnimation(.easeInOut(duration: 1.6)) {
                 self.bodyOffsetY = breaths % 2 == 0 ? 18 : 14
@@ -1052,11 +1055,25 @@ final class PandaViewModel: ObservableObject {
                         self.headTilt = 0
                     }
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3.4) {
-                    withAnimation(.spring(response: 0.6, dampingFraction: 0.75)) {
-                        self.sitting = false
-                        self.cushionVisible = false
+                // Stand up in stages — paws unfold first, then she pushes off
+                // the cushion, then the cushion fades. Avoids the abrupt
+                // "pop back to normal" snap.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.2) {
+                    withAnimation(.easeInOut(duration: 0.55)) {
                         self.pawsInLap = false
+                        self.squashScale = 0.96
+                    }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.9) {
+                    withAnimation(.spring(response: 0.55, dampingFraction: 0.78)) {
+                        self.sitting = false
+                        self.bodyOffsetY = 4
+                        self.squashScale = 1.04
+                    }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
+                    withAnimation(.spring(response: 0.6, dampingFraction: 0.75)) {
+                        self.cushionVisible = false
                         self.bodyOffsetY = 0
                         self.squashScale = 1.0
                     }
@@ -1142,7 +1159,7 @@ final class PandaViewModel: ObservableObject {
     private func reactGiggle() {
         withAnimation { mouthShape = .grin; eyesClosed = true; blushVisible = true }
         var i = 0
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.18, repeats: true) { [weak self] timer in
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.27, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             withAnimation(.easeInOut(duration: 0.16)) {
                 self.headTilt = i % 2 == 0 ? 7 : -7
@@ -1237,7 +1254,7 @@ final class PandaViewModel: ObservableObject {
     private func reactDance() {
         withAnimation { mouthShape = .grin; blushVisible = true }
         var i = 0
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.22, repeats: true) { [weak self] timer in
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.33, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             withAnimation(.easeInOut(duration: 0.2)) {
                 self.headTilt = i % 2 == 0 ? 10 : -10
@@ -1419,7 +1436,7 @@ final class PandaViewModel: ObservableObject {
 
     private func reactHiccup() {
         var i = 0
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.45, repeats: true) { [weak self] timer in
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.675, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             withAnimation(.spring(response: 0.16, dampingFraction: 0.4)) {
                 self.bodyOffsetY = -12
@@ -1448,7 +1465,7 @@ final class PandaViewModel: ObservableObject {
 
     private func reactWiggleButt() {
         var i = 0
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.16, repeats: true) { [weak self] timer in
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.24, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             withAnimation(.easeInOut(duration: 0.14)) {
                 self.bodyRoll = i % 2 == 0 ? 6 : -6
@@ -1509,7 +1526,7 @@ final class PandaViewModel: ObservableObject {
             leftArmRaised = true
             rightArmRaised = true
         }
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.18, repeats: true) { [weak self] timer in
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.27, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             withAnimation(.easeInOut(duration: 0.14)) {
                 self.leftArmWave = i % 2 == 0 ? 30 : 0
@@ -1682,7 +1699,7 @@ final class PandaViewModel: ObservableObject {
     private func reactNuzzle() {
         var i = 0
         withAnimation { mouthShape = .grin; blushVisible = true; eyesClosed = true }
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.22, repeats: true) { [weak self] timer in
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.33, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             withAnimation(.easeInOut(duration: 0.2)) {
                 self.headTilt = i % 2 == 0 ? -12 : 12
