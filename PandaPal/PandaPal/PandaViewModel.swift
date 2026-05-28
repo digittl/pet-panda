@@ -401,11 +401,11 @@ final class PandaViewModel: ObservableObject {
     }
 
     private func idleTikTokDance() {
-        let moves = 12
+        let moves = 14
         var step = 0
-        let stepInterval = 0.32
+        let stepInterval = 0.42
 
-        withAnimation(.spring(response: 0.25, dampingFraction: 0.55)) {
+        withAnimation(.easeInOut(duration: 0.35)) {
             mouthShape = .grin
             blushVisible = true
             eyesWide = false
@@ -416,53 +416,55 @@ final class PandaViewModel: ObservableObject {
             step += 1
             let beat = step % 4
 
-            withAnimation(.spring(response: 0.18, dampingFraction: 0.55)) {
+            // Longer easeInOut transitions blend the poses smoothly so each
+            // beat flows into the next instead of snapping.
+            withAnimation(.easeInOut(duration: stepInterval * 0.85)) {
                 switch beat {
                 case 1:
-                    // Right hand up, left low — hip pop right.
+                    // Right hand up, left low — gentle hip pop right.
                     self.leftArmRaised = false
                     self.rightArmRaised = true
-                    self.leftArmWave = 12
-                    self.rightArmWave = -8
-                    self.bodyOffsetY = -3
-                    self.headTilt = 6
-                    self.squashScale = 1.04
-                    self.shadowScale = 0.9
-                    self.walkStride = 3
-                    self.walkFootLift = 4
+                    self.leftArmWave = 8
+                    self.rightArmWave = -6
+                    self.bodyOffsetY = -2
+                    self.headTilt = 4
+                    self.squashScale = 1.02
+                    self.shadowScale = 0.94
+                    self.walkStride = 2
+                    self.walkFootLift = 2
                     self.leadingPawSide = 1
                 case 2:
                     // Both arms up — peak moment.
                     self.leftArmRaised = true
                     self.rightArmRaised = true
-                    self.leftArmWave = -10
-                    self.rightArmWave = 10
-                    self.bodyOffsetY = -6
+                    self.leftArmWave = -6
+                    self.rightArmWave = 6
+                    self.bodyOffsetY = -4
                     self.headTilt = 0
-                    self.squashScale = 0.96
-                    self.shadowScale = 1.08
+                    self.squashScale = 0.98
+                    self.shadowScale = 1.04
                     self.walkStride = 0
                     self.walkFootLift = 0
                 case 3:
                     // Left hand up, right low — hip pop left.
                     self.leftArmRaised = true
                     self.rightArmRaised = false
-                    self.leftArmWave = -8
-                    self.rightArmWave = 12
-                    self.bodyOffsetY = -3
-                    self.headTilt = -6
-                    self.squashScale = 1.04
-                    self.shadowScale = 0.9
-                    self.walkStride = -3
-                    self.walkFootLift = 4
+                    self.leftArmWave = -6
+                    self.rightArmWave = 8
+                    self.bodyOffsetY = -2
+                    self.headTilt = -4
+                    self.squashScale = 1.02
+                    self.shadowScale = 0.94
+                    self.walkStride = -2
+                    self.walkFootLift = 2
                     self.leadingPawSide = -1
                 default:
-                    // Settle, light bounce.
+                    // Settle.
                     self.leftArmRaised = false
                     self.rightArmRaised = false
                     self.leftArmWave = 0
                     self.rightArmWave = 0
-                    self.bodyOffsetY = -1
+                    self.bodyOffsetY = 0
                     self.headTilt = 0
                     self.squashScale = 1.0
                     self.shadowScale = 1.0
@@ -471,7 +473,7 @@ final class PandaViewModel: ObservableObject {
                 }
             }
 
-            if step % 4 == 2 {
+            if beat == 2 {
                 self.spawnParticle(.sparkle, at: CGSize(width: CGFloat.random(in: -22...22), height: -28))
             }
 

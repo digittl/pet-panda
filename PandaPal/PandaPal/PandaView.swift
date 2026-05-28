@@ -481,7 +481,7 @@ private struct ArticulatedArm: View {
         // Angle measured from straight-down. Positive = elbow swings toward
         // the centre of the body.
         switch pose {
-        case .rest: return side == -1 ? 8 : -8
+        case .rest: return side == -1 ? 30 : -30
         case .raised: return side == -1 ? 50 : -50
         case .lap: return side == -1 ? 52 : -52
         }
@@ -490,14 +490,14 @@ private struct ArticulatedArm: View {
     private var elbowBend: Double {
         // Relative to the upper arm.
         switch pose {
-        case .rest: return side == -1 ? -4 : 4
+        case .rest: return side == -1 ? -6 : 6
         case .raised: return side == -1 ? -30 : 30
         case .lap: return side == -1 ? -28 : 28
         }
     }
 
     private var upperAngle: Double {
-        let clampedWave = max(-20, min(20, wave))
+        let clampedWave = max(-35, min(35, wave))
         return shoulderAngle + clampedWave
     }
 
