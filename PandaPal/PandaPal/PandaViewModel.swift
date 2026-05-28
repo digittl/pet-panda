@@ -63,19 +63,36 @@ final class PandaViewModel: ObservableObject {
     @Published var shadowScale: CGFloat = 1.0
     @Published var bambooVisible: Bool = false
     @Published var bambooTilt: Double = 0
+    @Published var isDragging: Bool = false
+    @Published var dragSway: Double = 0
 
     @Published var particles: [PandaParticleSpawn] = []
 
-    // External hook for moving the window (set by WindowController)
+    // External hooks set by WindowController
     var onWander: ((CGFloat, CGFloat, TimeInterval) -> Void)?
+    var onMoveBy: ((CGFloat, CGFloat) -> Void)?
+    var onDragEnded: (() -> Void)?
 
     private var idleTimer: Timer?
     private var wanderTimer: Timer?
+    private var activeTimers: [Timer] = []
     private var isBusy = false
+
+    private func registerTimer(_ timer: Timer) {
+        activeTimers.append(timer)
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func cancelActiveTimers() {
+        for timer in activeTimers {
+            timer.invalidate()
+        }
+        activeTimers.removeAll()
+    }
 
     init() {
         scheduleNextIdle()
-        scheduleNextWander()
+        scheduleNextWander(initial: true)
     }
 
     deinit {
@@ -102,9 +119,83 @@ final class PandaViewModel: ObservableObject {
             { self.reactSurprised() },
             { self.reactDance() },
             { self.reactSpin() },
-            { self.reactJump() }
+            { self.reactJump() },
+            { self.reactBlowKiss() },
+            { self.reactBackflip() },
+            { self.reactRaspberry() },
+            { self.reactHiccup() },
+            { self.reactWiggleButt() },
+            { self.reactShy() },
+            { self.reactClap() },
+            { self.reactFlex() }
         ]
         reactions.randomElement()?()
+    }
+
+    // MARK: - Drag interaction
+
+    func beginDrag() {
+        cancelTimers()
+        isBusy = true
+        isDragging = true
+
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.5)) {
+            leftArmRaised = true
+            rightArmRaised = true
+            leftArmWave = -30
+            rightArmWave = 30
+            eyesWide = true
+            mouthShape = .ohh
+            bodyOffsetY = -4
+            squashScale = 1.04
+        }
+    }
+
+    func updateDrag(velocityX: CGFloat) {
+        let clamped = max(min(velocityX, 30), -30)
+        let target = Double(clamped) * 0.6
+        withAnimation(.easeOut(duration: 0.12)) {
+            dragSway = target
+            lookDirection = CGFloat(max(min(clamped * 0.3, 8), -8))
+        }
+    }
+
+    func endDrag() {
+        isDragging = false
+        onDragEnded?()
+
+        // Sway settles to 0
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.55)) {
+            dragSway = 0
+            leftArmWave = 0
+            rightArmWave = 0
+            lookDirection = 0
+        }
+
+        // Landing squish
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.45)) {
+            squashScale = 0.85
+            bodyOffsetY = 4
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.55)) {
+                self.squashScale = 1.06
+                self.bodyOffsetY = 0
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                self.squashScale = 1.0
+                self.leftArmRaised = false
+                self.rightArmRaised = false
+                self.eyesWide = false
+                self.mouthShape = .grin
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            withAnimation { self.mouthShape = .smile }
+            self.finishAnimation()
+        }
     }
 
     // MARK: - Idle scheduling
@@ -117,9 +208,9 @@ final class PandaViewModel: ObservableObject {
         }
     }
 
-    private func scheduleNextWander() {
+    private func scheduleNextWander(initial: Bool = false) {
         wanderTimer?.invalidate()
-        let delay = Double.random(in: 15...35)
+        let delay = initial ? Double.random(in: 3...6) : Double.random(in: 6...14)
         wanderTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             self?.wander()
         }
@@ -130,12 +221,39 @@ final class PandaViewModel: ObservableObject {
         idleTimer = nil
         wanderTimer?.invalidate()
         wanderTimer = nil
+        cancelActiveTimers()
     }
 
     private func finishAnimation() {
         isBusy = false
         scheduleNextIdle()
         scheduleNextWander()
+    }
+
+    private func resetTransientState() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            leftArmRaised = false
+            rightArmRaised = false
+            leftArmWave = 0
+            rightArmWave = 0
+            eyesClosed = false
+            eyesWide = false
+            eyesHeart = false
+            eyesStarry = false
+            mouthShape = .smile
+            headTilt = 0
+            bodyRoll = 0
+            bodyOffsetY = 0
+            squashScale = 1.0
+            bounceScale = 1.0
+            shadowScale = 1.0
+            earWiggle = 0
+            bambooVisible = false
+            blushVisible = false
+            lookDirection = 0
+            lookVertical = 0
+            dragSway = 0
+        }
     }
 
     private func playRandomIdle() {
@@ -163,10 +281,15 @@ final class PandaViewModel: ObservableObject {
     // MARK: - Wander
 
     private func wander() {
-        guard !isBusy else {
+        // Don't interrupt a drag; otherwise preempt idle animations so we
+        // actually walk on schedule.
+        if isDragging {
             scheduleNextWander()
             return
         }
+
+        cancelTimers()
+        resetTransientState()
         isBusy = true
 
         guard let onWander = onWander else {
@@ -200,7 +323,7 @@ final class PandaViewModel: ObservableObject {
                 timer.invalidate()
             }
         }
-        RunLoop.main.add(bobTimer, forMode: .common)
+        registerTimer(bobTimer)
 
         onWander(dx, dy, duration)
 
@@ -264,7 +387,7 @@ final class PandaViewModel: ObservableObject {
                 self.finishAnimation()
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
+        registerTimer(timer)
     }
 
     private func idleSleep() {
@@ -294,7 +417,7 @@ final class PandaViewModel: ObservableObject {
                 self.finishAnimation()
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
+        registerTimer(timer)
     }
 
     private func idleStretch() {
@@ -372,7 +495,7 @@ final class PandaViewModel: ObservableObject {
                 self.finishAnimation()
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
+        registerTimer(timer)
     }
 
     private func idleEatBamboo() {
@@ -408,7 +531,7 @@ final class PandaViewModel: ObservableObject {
                 self.finishAnimation()
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
+        registerTimer(timer)
     }
 
     private func idlePeekABoo() {
@@ -499,7 +622,7 @@ final class PandaViewModel: ObservableObject {
                 self.finishAnimation()
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
+        registerTimer(timer)
     }
 
     private func idleBounce() {
@@ -530,7 +653,7 @@ final class PandaViewModel: ObservableObject {
                 self.finishAnimation()
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
+        registerTimer(timer)
     }
 
     // MARK: - Pat reactions (random)
@@ -578,7 +701,7 @@ final class PandaViewModel: ObservableObject {
                 self.finishAnimation()
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
+        registerTimer(timer)
     }
 
     private func reactStarStruck() {
@@ -683,7 +806,7 @@ final class PandaViewModel: ObservableObject {
                 self.finishAnimation()
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
+        registerTimer(timer)
     }
 
     private func reactSpin() {
@@ -736,6 +859,256 @@ final class PandaViewModel: ObservableObject {
                 withAnimation { self.mouthShape = .smile }
                 self.finishAnimation()
             }
+        }
+    }
+
+    private func reactBlowKiss() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            rightArmRaised = true
+            rightArmWave = -40
+            mouthShape = .ohh
+            eyesClosed = true
+            blushVisible = true
+            headTilt = -5
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                self.rightArmWave = 10
+            }
+            for i in 0..<3 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.18) {
+                    self.spawnParticle(.heart, at: CGSize(width: 30 + CGFloat(i) * 8, height: -10 - CGFloat(i) * 12))
+                }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                self.rightArmRaised = false
+                self.rightArmWave = 0
+                self.mouthShape = .smile
+                self.eyesClosed = false
+                self.blushVisible = false
+                self.headTilt = 0
+            }
+            self.finishAnimation()
+        }
+    }
+
+    private func reactBackflip() {
+        withAnimation(.spring(response: 0.18, dampingFraction: 0.5)) {
+            squashScale = 0.85
+            mouthShape = .ohh
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.easeInOut(duration: 0.6)) {
+                self.bodyRoll = -360
+                self.bodyOffsetY = -24
+                self.squashScale = 1.05
+                self.shadowScale = 0.65
+                self.eyesClosed = true
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
+            self.bodyRoll = 0
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                self.bodyOffsetY = 0
+                self.shadowScale = 1.1
+                self.squashScale = 0.92
+                self.eyesClosed = false
+                self.mouthShape = .grin
+            }
+            self.spawnParticle(.star, at: CGSize(width: 0, height: -34))
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                self.squashScale = 1.0
+                self.shadowScale = 1.0
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                withAnimation { self.mouthShape = .smile }
+                self.finishAnimation()
+            }
+        }
+    }
+
+    private func reactRaspberry() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            mouthShape = .yawn
+            eyesClosed = true
+            headTilt = -10
+            blushVisible = true
+        }
+        for i in 0..<4 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1 + Double(i) * 0.1) {
+                self.spawnParticle(.sparkle, at: CGSize(width: 15 + CGFloat(i) * 5, height: 4))
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                self.mouthShape = .grin
+                self.eyesClosed = false
+                self.headTilt = 0
+                self.blushVisible = false
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                withAnimation { self.mouthShape = .smile }
+                self.finishAnimation()
+            }
+        }
+    }
+
+    private func reactHiccup() {
+        var i = 0
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.45, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            withAnimation(.spring(response: 0.16, dampingFraction: 0.4)) {
+                self.bodyOffsetY = -12
+                self.squashScale = 1.08
+                self.eyesWide = true
+                self.mouthShape = .ohh
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.55)) {
+                    self.bodyOffsetY = 0
+                    self.squashScale = 1.0
+                    self.eyesWide = false
+                    self.mouthShape = .smile
+                }
+            }
+            i += 1
+            if i >= 3 {
+                timer.invalidate()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.finishAnimation()
+                }
+            }
+        }
+        registerTimer(timer)
+    }
+
+    private func reactWiggleButt() {
+        var i = 0
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.16, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            withAnimation(.easeInOut(duration: 0.14)) {
+                self.bodyRoll = i % 2 == 0 ? 6 : -6
+                self.headTilt = i % 2 == 0 ? -3 : 3
+                self.mouthShape = .grin
+            }
+            i += 1
+            if i >= 8 {
+                timer.invalidate()
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    self.bodyRoll = 0
+                    self.headTilt = 0
+                    self.mouthShape = .smile
+                }
+                self.finishAnimation()
+            }
+        }
+        registerTimer(timer)
+    }
+
+    private func reactShy() {
+        withAnimation(.easeInOut(duration: 0.35)) {
+            blushVisible = true
+            leftArmRaised = true
+            rightArmRaised = true
+            leftArmWave = -50
+            rightArmWave = 50
+            mouthShape = .smile
+            headTilt = 8
+            lookDirection = -6
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                self.leftArmWave = -30
+                self.rightArmWave = 30
+                self.lookDirection = 4
+                self.headTilt = -4
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                self.leftArmRaised = false
+                self.rightArmRaised = false
+                self.leftArmWave = 0
+                self.rightArmWave = 0
+                self.blushVisible = false
+                self.headTilt = 0
+                self.lookDirection = 0
+            }
+            self.finishAnimation()
+        }
+    }
+
+    private func reactClap() {
+        var i = 0
+        withAnimation(.easeInOut(duration: 0.2)) {
+            mouthShape = .grin
+            leftArmRaised = true
+            rightArmRaised = true
+        }
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.18, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            withAnimation(.easeInOut(duration: 0.14)) {
+                self.leftArmWave = i % 2 == 0 ? 30 : 0
+                self.rightArmWave = i % 2 == 0 ? -30 : 0
+                self.bodyOffsetY = i % 2 == 0 ? -4 : 0
+            }
+            if i % 2 == 1 {
+                self.spawnParticle(.sparkle, at: CGSize(width: CGFloat.random(in: -20...20), height: 5))
+            }
+            i += 1
+            if i >= 7 {
+                timer.invalidate()
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    self.leftArmRaised = false
+                    self.rightArmRaised = false
+                    self.leftArmWave = 0
+                    self.rightArmWave = 0
+                    self.bodyOffsetY = 0
+                    self.mouthShape = .smile
+                }
+                self.finishAnimation()
+            }
+        }
+        registerTimer(timer)
+    }
+
+    private func reactFlex() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.55)) {
+            leftArmRaised = true
+            rightArmRaised = true
+            leftArmWave = -75
+            rightArmWave = 75
+            squashScale = 1.08
+            mouthShape = .grin
+            eyesWide = true
+            headTilt = -3
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            self.spawnParticle(.sparkle, at: CGSize(width: -32, height: -8))
+            self.spawnParticle(.sparkle, at: CGSize(width: 32, height: -8))
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                self.headTilt = 3
+            }
+            self.spawnParticle(.star, at: CGSize(width: 0, height: -34))
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                self.leftArmRaised = false
+                self.rightArmRaised = false
+                self.leftArmWave = 0
+                self.rightArmWave = 0
+                self.squashScale = 1.0
+                self.mouthShape = .smile
+                self.eyesWide = false
+                self.headTilt = 0
+            }
+            self.finishAnimation()
         }
     }
 

@@ -21,6 +21,7 @@ struct PandaView: View {
         }
         .rotationEffect(.degrees(viewModel.headTilt))
         .rotationEffect(.degrees(viewModel.bodyRoll))
+        .rotationEffect(.degrees(viewModel.dragSway), anchor: .top)
     }
 
     private var pandaBody: some View {

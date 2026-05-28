@@ -19,7 +19,7 @@ final class PandaWindowController: NSWindowController {
         panel.hasShadow = false
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.isMovableByWindowBackground = true
+        panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
 
@@ -32,6 +32,14 @@ final class PandaWindowController: NSWindowController {
 
         viewModel.onWander = { [weak self] dx, dy, duration in
             self?.wander(dx: dx, dy: dy, duration: duration)
+        }
+
+        viewModel.onMoveBy = { [weak self] dx, dy in
+            self?.moveWindowBy(dx: dx, dy: dy)
+        }
+
+        viewModel.onDragEnded = { [weak self] in
+            self?.savePosition()
         }
 
         restorePosition()
@@ -70,6 +78,15 @@ final class PandaWindowController: NSWindowController {
         guard let origin = window?.frame.origin else { return }
         let positionString = "\(origin.x),\(origin.y)"
         UserDefaults.standard.set(positionString, forKey: positionKey)
+    }
+
+    private func moveWindowBy(dx: CGFloat, dy: CGFloat) {
+        guard let window = window else { return }
+        var origin = window.frame.origin
+        origin.x += dx
+        // SwiftUI gesture deltaY is positive going down; window y is positive going up.
+        origin.y -= dy
+        window.setFrameOrigin(origin)
     }
 
     private func wander(dx: CGFloat, dy: CGFloat, duration: TimeInterval) {

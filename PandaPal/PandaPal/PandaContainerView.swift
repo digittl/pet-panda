@@ -2,21 +2,57 @@ import SwiftUI
 
 struct PandaContainerView: View {
     @ObservedObject var viewModel: PandaViewModel
+    @State private var lastDragLocation: CGPoint?
+    @State private var dragStarted = false
 
     var body: some View {
         ZStack {
-            Color.clear
+            Color.clear.contentShape(Rectangle())
 
             PandaView(viewModel: viewModel)
                 .scaleEffect(viewModel.bounceScale)
                 .offset(y: viewModel.bodyOffsetY)
-                .onTapGesture { viewModel.pat() }
 
             ForEach(viewModel.particles) { spawn in
                 ParticleView(spawn: spawn)
             }
         }
         .frame(width: 140, height: 160)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                .onChanged { value in
+                    let translation = value.translation
+                    let distance = sqrt(translation.width * translation.width + translation.height * translation.height)
+                    if !dragStarted {
+                        // Only treat as drag once movement exceeds a tap threshold.
+                        if distance < 4 {
+                            return
+                        }
+                        dragStarted = true
+                        viewModel.beginDrag()
+                    }
+                    let current = value.location
+                    if let last = lastDragLocation {
+                        let dx = current.x - last.x
+                        let dy = current.y - last.y
+                        viewModel.onMoveBy?(dx, dy)
+                        viewModel.updateDrag(velocityX: dx)
+                    }
+                    lastDragLocation = current
+                }
+                .onEnded { value in
+                    let translation = value.translation
+                    let distance = sqrt(translation.width * translation.width + translation.height * translation.height)
+                    if dragStarted {
+                        dragStarted = false
+                        lastDragLocation = nil
+                        viewModel.endDrag()
+                    } else if distance < 4 {
+                        viewModel.pat()
+                    }
+                }
+        )
     }
 }
 
