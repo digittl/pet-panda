@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 final class PandaWindowController: NSWindowController {
-    private let baseSize = NSSize(width: 140, height: 160)
+    private let baseSize = NSSize(width: 180, height: 200)
     private let positionKey = "PandaPal.lastPosition"
     private let sizeKey = "PandaPal.size"
     let viewModel = PandaViewModel()
@@ -16,7 +16,7 @@ final class PandaWindowController: NSWindowController {
         let storedSize = UserDefaults.standard.string(forKey: "PandaPal.size").flatMap(PandaSize.init(rawValue:)) ?? .medium
         let m = storedSize.multiplier
         let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: NSSize(width: 140 * m, height: 160 * m)),
+            contentRect: NSRect(origin: .zero, size: NSSize(width: 180 * m, height: 200 * m)),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false

@@ -20,10 +20,10 @@ struct PandaContainerView: View {
                     ParticleView(spawn: spawn)
                 }
             }
-            .frame(width: 140, height: 160)
+            .frame(width: 180, height: 200)
             .scaleEffect(viewModel.size.multiplier)
         }
-        .frame(width: 140 * viewModel.size.multiplier, height: 160 * viewModel.size.multiplier)
+        .frame(width: 180 * viewModel.size.multiplier, height: 200 * viewModel.size.multiplier)
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 0)
