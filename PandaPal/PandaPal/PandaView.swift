@@ -93,16 +93,30 @@ struct PandaView: View {
                 leg(side: 1)
             }
 
-            // Arms — always behind the head so they never cover the face.
-            arm(side: -1, pose: armPose(raised: viewModel.leftArmRaised), wave: viewModel.leftArmWave)
-            arm(side: 1, pose: armPose(raised: viewModel.rightArmRaised), wave: viewModel.rightArmWave)
+            // Resting arms sit behind the head for a clean panda silhouette.
+            // When she's napping / sitting / relaxing, the same capsules just
+            // angle inward from their default position instead of swapping in
+            // a separate "paws in lap" view.
+            if !viewModel.leftArmRaised {
+                arm(side: -1, raised: false, wave: viewModel.leftArmWave, inLap: viewModel.pawsInLap)
+            }
+            if !viewModel.rightArmRaised {
+                arm(side: 1, raised: false, wave: viewModel.rightArmWave, inLap: viewModel.pawsInLap)
+            }
 
             // Head
             head
 
-            // Bamboo (held during eating) — flies in from upper-right and
-            // settles at chest level, where her resting arms naturally come up
-            // from the sides to meet it. No extra hand overlays needed.
+            // Raised arms render IN FRONT of the head so her paws are clearly
+            // holding the bamboo at face level.
+            if viewModel.leftArmRaised {
+                arm(side: -1, raised: true, wave: viewModel.leftArmWave, inLap: false)
+            }
+            if viewModel.rightArmRaised {
+                arm(side: 1, raised: true, wave: viewModel.rightArmWave, inLap: false)
+            }
+
+            // Bamboo (held during eating) — flies in from upper-right.
             if viewModel.bambooVisible {
                 BambooStick()
                     .rotationEffect(.degrees(viewModel.bambooTilt))
@@ -442,141 +456,49 @@ struct PandaView: View {
         .transition(.opacity)
     }
 
-    private func armPose(raised: Bool) -> ArmPose {
-        if viewModel.pawsInLap {
-            return .lap
+    private func arm(side: CGFloat, raised: Bool, wave: Double, inLap: Bool = false) -> some View {
+        // Single chibi capsule per arm. Side-dependent base angles so the
+        // right arm rotates inward symmetrically when raised. In the lap
+        // pose, the arms tilt strongly toward the centre from their default
+        // resting offset — no separate "paws in lap" view needed.
+        let baseDown: Double = side == -1 ? 18 : -18
+        let baseUp: Double = side == -1 ? -28 : 28
+        let baseLap: Double = side == -1 ? -38 : 38
+        let base: Double
+        if inLap {
+            base = baseLap
+        } else if raised {
+            base = baseUp
+        } else {
+            base = baseDown
         }
-        return raised ? .raised : .rest
-    }
+        let clampedWave = max(-25, min(25, wave))
+        let angle = base + clampedWave
 
-    private func arm(side: CGFloat, pose: ArmPose, wave: Double) -> some View {
-        ArticulatedArm(
-            side: side,
-            pose: pose,
-            wave: wave,
-            darkFill: darkFill,
-            outline: outline
-        )
-    }
-}
-
-enum ArmPose {
-    case rest, raised, lap
-}
-
-private struct ArticulatedArm: View {
-    let side: CGFloat
-    let pose: ArmPose
-    let wave: Double
-    let darkFill: LinearGradient
-    let outline: Color
-
-    private let upperLength: CGFloat = 17
-    private let lowerLength: CGFloat = 15
-    private let upperWidth: CGFloat = 15
-    private let lowerWidth: CGFloat = 14
-    private let handDiameter: CGFloat = 14
-
-    private var shoulderAngle: Double {
-        // Angle measured from straight-down. Positive = elbow swings toward
-        // the centre of the body.
-        switch pose {
-        case .rest: return side == -1 ? 30 : -30
-        case .raised: return side == -1 ? 50 : -50
-        case .lap: return side == -1 ? 52 : -52
-        }
-    }
-
-    private var elbowBend: Double {
-        // Relative to the upper arm.
-        switch pose {
-        case .rest: return side == -1 ? -6 : 6
-        case .raised: return side == -1 ? -30 : 30
-        case .lap: return side == -1 ? -28 : 28
-        }
-    }
-
-    private var upperAngle: Double {
-        let clampedWave = max(-35, min(35, wave))
-        return shoulderAngle + clampedWave
-    }
-
-    private var lowerAngle: Double { upperAngle + elbowBend }
-
-    private var shoulder: CGPoint { CGPoint(x: 23 * side, y: 5) }
-
-    private var elbow: CGPoint {
-        let rad = upperAngle * .pi / 180
-        return CGPoint(
-            x: shoulder.x + upperLength * CGFloat(sin(rad)),
-            y: shoulder.y + upperLength * CGFloat(cos(rad))
-        )
-    }
-
-    private var hand: CGPoint {
-        let rad = lowerAngle * .pi / 180
-        return CGPoint(
-            x: elbow.x + lowerLength * CGFloat(sin(rad)),
-            y: elbow.y + lowerLength * CGFloat(cos(rad))
-        )
-    }
-
-    var body: some View {
-        ZStack {
-            // Upper arm: shoulder → elbow.
-            segment(from: shoulder, to: elbow, width: upperWidth)
-
-            // Elbow joint cap — covers the seam where the two segments meet.
-            Circle()
+        return ZStack {
+            Capsule()
                 .fill(darkFill)
-                .frame(width: upperWidth - 1, height: upperWidth - 1)
+                .frame(width: 18, height: 32)
                 .overlay(
-                    Circle().stroke(outline, lineWidth: 0.8)
+                    Capsule()
+                        .stroke(outline, lineWidth: 1)
                 )
-                .position(elbow)
+                .overlay(
+                    Capsule()
+                        .fill(Color.white.opacity(0.14))
+                        .frame(width: 4, height: 20)
+                        .offset(x: -4 * side, y: -4)
+                        .blur(radius: 0.5)
+                )
 
-            // Lower arm: elbow → hand.
-            segment(from: elbow, to: hand, width: lowerWidth)
-
-            // Hand.
-            ZStack {
-                Circle()
-                    .fill(darkFill)
-                    .frame(width: handDiameter, height: handDiameter)
-                    .overlay(
-                        Circle().stroke(outline, lineWidth: 1)
-                    )
-
-                Circle()
-                    .fill(Color.pink.opacity(0.55))
-                    .frame(width: 5, height: 4)
-                    .offset(y: 1.5)
-            }
-            .position(hand)
+            // Pink paw pad at the bottom (only really visible when raised).
+            Circle()
+                .fill(Color.pink.opacity(0.45))
+                .frame(width: 7, height: 5)
+                .offset(y: 12)
         }
-        // The ZStack auto-sizes to its largest child. Give it a generous fixed
-        // frame so .position coordinates are interpreted in panda-local space
-        // with (0,0) at the centre.
-        .frame(width: 1, height: 1)
-    }
-
-    private func segment(from start: CGPoint, to end: CGPoint, width: CGFloat) -> some View {
-        let dx = end.x - start.x
-        let dy = end.y - start.y
-        let length = hypot(dx, dy)
-        let angle = atan2(dy, dx) * 180 / .pi - 90 // capsule's long axis is vertical
-
-        return Capsule()
-            .fill(darkFill)
-            .frame(width: width, height: length + width * 0.4)
-            .overlay(
-                Capsule().stroke(outline, lineWidth: 1)
-            )
-            .rotationEffect(.degrees(angle))
-            .position(
-                x: (start.x + end.x) / 2,
-                y: (start.y + end.y) / 2
-            )
+        .rotationEffect(.degrees(angle), anchor: UnitPoint(x: 0.5, y: 0.15))
+        .offset(x: 30 * side, y: raised ? 6 : (inLap ? 22 : 16))
     }
 }
 
