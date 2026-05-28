@@ -92,6 +92,27 @@ PandaPal/
 - **Position persistence**: Last position saved to `UserDefaults` on every window move
 - **Animation system**: Timer-based idle cycle with randomized intervals; each animation state modifies `@Published` properties that drive SwiftUI view updates
 
+## Download
+
+Pre-built releases are available on the [Releases page](../../releases). Each release includes a `PandaPal.zip` containing the ready-to-run app:
+
+1. Go to the **Releases** page on GitHub
+2. Download `PandaPal.zip` from the latest release
+3. Unzip and drag `PandaPal.app` to your Applications folder (or run it from anywhere)
+4. On first launch, right-click → Open to bypass Gatekeeper (unsigned app)
+
+Build artifacts are also available from any CI run on the **Actions** tab.
+
+## Creating a Release
+
+To trigger a new downloadable build:
+
+1. Go to **Releases** → **Draft a new release** on GitHub
+2. Create a new tag (e.g. `v1.0.0`)
+3. Give it a title and description
+4. Click **Publish release**
+5. GitHub Actions will automatically build the app and attach `PandaPal.zip` to the release
+
 ## License
 
 MIT
