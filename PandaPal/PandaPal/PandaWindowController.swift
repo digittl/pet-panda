@@ -195,6 +195,14 @@ final class PandaWindowController: NSWindowController {
         pet.target = self
         menu.addItem(pet)
 
+        let wave = NSMenuItem(title: "Wave Hello", action: #selector(menuWave), keyEquivalent: "")
+        wave.target = self
+        menu.addItem(wave)
+
+        let dance = NSMenuItem(title: "TikTok Dance", action: #selector(menuDance), keyEquivalent: "")
+        dance.target = self
+        menu.addItem(dance)
+
         let walk = NSMenuItem(title: "Walk", action: #selector(menuWalk), keyEquivalent: "")
         walk.target = self
         menu.addItem(walk)
@@ -222,6 +230,14 @@ final class PandaWindowController: NSWindowController {
 
     @objc private func menuPet() {
         viewModel.pet()
+    }
+
+    @objc private func menuWave() {
+        viewModel.waveHello()
+    }
+
+    @objc private func menuDance() {
+        viewModel.danceNow()
     }
 
     @objc private func menuWalk() {

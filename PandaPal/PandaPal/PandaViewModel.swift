@@ -103,6 +103,7 @@ final class PandaViewModel: ObservableObject {
     @Published var sitting: Bool = false
     @Published var cushionVisible: Bool = false
     @Published var pawsInLap: Bool = false
+    @Published var greetingWave: Bool = false
 
     @Published var particles: [PandaParticleSpawn] = []
 
@@ -188,6 +189,22 @@ final class PandaViewModel: ObservableObject {
         resetTransientState()
         isBusy = true
         playBambooFeast(celebratory: true)
+    }
+
+    func waveHello() {
+        guard !isDragging else { return }
+        cancelTimers()
+        resetTransientState()
+        isBusy = true
+        playFriendlyWave()
+    }
+
+    func danceNow() {
+        guard !isDragging else { return }
+        cancelTimers()
+        resetTransientState()
+        isBusy = true
+        idleTikTokDance()
     }
 
     func requestSize(_ size: PandaSize) {
@@ -372,6 +389,7 @@ final class PandaViewModel: ObservableObject {
             sitting = false
             cushionVisible = false
             pawsInLap = false
+            greetingWave = false
         }
     }
 
@@ -389,7 +407,6 @@ final class PandaViewModel: ObservableObject {
             { self.idleLookAround() },
             { self.idleYawn() },
             { self.idleEarWiggle() },
-            { self.idlePeekABoo() },
             { self.idleSneeze() },
             { self.idleHumTune() },
             { self.idleBounce() },
@@ -408,91 +425,59 @@ final class PandaViewModel: ObservableObject {
     }
 
     private func idleTikTokDance() {
-        let moves = 14
-        var step = 0
-        let stepInterval = 0.63
+        let duration: TimeInterval = 4.2
+        let startedAt = Date()
+        var sparkleBeat = 0
 
-        withAnimation(.easeInOut(duration: 0.35)) {
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
             mouthShape = .grin
             blushVisible = true
             eyesWide = false
+            leftArmRaised = true
+            rightArmRaised = true
+            bodyOffsetY = -2
         }
 
-        let timer = Timer(timeInterval: stepInterval, repeats: true) { [weak self] timer in
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
-            step += 1
-            let beat = step % 4
 
-            // Longer easeInOut transitions blend the poses smoothly so each
-            // beat flows into the next instead of snapping.
-            withAnimation(.easeInOut(duration: stepInterval * 0.85)) {
-                switch beat {
-                case 1:
-                    // Right hand up, left low — gentle hip pop right.
-                    self.leftArmRaised = false
-                    self.rightArmRaised = true
-                    self.leftArmWave = 8
-                    self.rightArmWave = -6
-                    self.bodyOffsetY = -2
-                    self.headTilt = 4
-                    self.squashScale = 1.02
-                    self.shadowScale = 0.94
-                    self.walkStride = 2
-                    self.walkFootLift = 2
-                    self.leadingPawSide = 1
-                case 2:
-                    // Both arms up — peak moment.
-                    self.leftArmRaised = true
-                    self.rightArmRaised = true
-                    self.leftArmWave = -6
-                    self.rightArmWave = 6
-                    self.bodyOffsetY = -4
-                    self.headTilt = 0
-                    self.squashScale = 0.98
-                    self.shadowScale = 1.04
-                    self.walkStride = 0
-                    self.walkFootLift = 0
-                case 3:
-                    // Left hand up, right low — hip pop left.
-                    self.leftArmRaised = true
-                    self.rightArmRaised = false
-                    self.leftArmWave = -6
-                    self.rightArmWave = 8
-                    self.bodyOffsetY = -2
-                    self.headTilt = -4
-                    self.squashScale = 1.02
-                    self.shadowScale = 0.94
-                    self.walkStride = -2
-                    self.walkFootLift = 2
-                    self.leadingPawSide = -1
-                default:
-                    // Settle.
-                    self.leftArmRaised = false
-                    self.rightArmRaised = false
-                    self.leftArmWave = 0
-                    self.rightArmWave = 0
-                    self.bodyOffsetY = 0
-                    self.headTilt = 0
-                    self.squashScale = 1.0
-                    self.shadowScale = 1.0
-                    self.walkStride = 0
-                    self.walkFootLift = 0
-                }
-            }
+            let elapsed = Date().timeIntervalSince(startedAt)
+            let progress = min(1.0, elapsed / duration)
+            let fadeIn = min(1.0, progress / 0.12)
+            let fadeOut = min(1.0, (1.0 - progress) / 0.16)
+            let envelope = min(fadeIn, fadeOut)
+            let shake = sin(elapsed * 2.0 * .pi * 3.4)
+            let counterShake = sin(elapsed * 2.0 * .pi * 3.4 + .pi)
+            let bounce = sin(elapsed * 2.0 * .pi * 1.7)
+            let stepSide: CGFloat = bounce >= 0 ? -1 : 1
 
-            if beat == 2 {
+            self.leftArmWave = shake * 18 * envelope
+            self.rightArmWave = counterShake * 18 * envelope
+            self.bodyRoll = shake * 3 * envelope
+            self.headTilt = counterShake * 4 * envelope
+            self.bodyOffsetY = -2 - CGFloat(max(0, bounce)) * 3 * CGFloat(envelope)
+            self.squashScale = 1.0 + CGFloat(abs(bounce)) * 0.035 * CGFloat(envelope)
+            self.shadowScale = 1.0 - CGFloat(max(0, bounce)) * 0.12 * CGFloat(envelope)
+            self.leadingPawSide = stepSide
+            self.walkStride = stepSide * 4 * CGFloat(envelope)
+            self.walkFootLift = CGFloat(max(0, abs(bounce))) * 4 * CGFloat(envelope)
+
+            let currentSparkleBeat = Int(elapsed / 0.75)
+            if currentSparkleBeat > sparkleBeat {
+                sparkleBeat = currentSparkleBeat
                 self.spawnParticle(.sparkle, at: CGSize(width: CGFloat.random(in: -22...22), height: -28))
             }
 
-            if step >= moves {
+            if progress >= 1.0 {
                 timer.invalidate()
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                withAnimation(.spring(response: 0.48, dampingFraction: 0.84)) {
                     self.leftArmRaised = false
                     self.rightArmRaised = false
                     self.leftArmWave = 0
                     self.rightArmWave = 0
                     self.bodyOffsetY = 0
                     self.headTilt = 0
+                    self.bodyRoll = 0
                     self.squashScale = 1.0
                     self.shadowScale = 1.0
                     self.walkStride = 0
@@ -540,21 +525,21 @@ final class PandaViewModel: ObservableObject {
         }
 
         var step = 0
-        let stepInterval = 0.14
+        let stepInterval = 0.18
         let totalSteps = max(10, Int(duration / stepInterval))
         let bobTimer = Timer.scheduledTimer(withTimeInterval: stepInterval, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             step += 1
             let isEvenStep = step % 2 == 0
-            withAnimation(.spring(response: 0.16, dampingFraction: 0.78)) {
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.86)) {
                 self.leadingPawSide = isEvenStep ? -1 : 1
-                self.walkFootLift = isEvenStep ? 5 : 4
-                self.walkStride = isEvenStep ? 4 : -4
-                self.bodyOffsetY = isEvenStep ? -4 : -1
-                self.squashScale = isEvenStep ? 1.015 : 0.985
-                self.shadowScale = isEvenStep ? 0.86 : 1.02
-                self.leftArmWave = isEvenStep ? 16 : -14
-                self.rightArmWave = isEvenStep ? -16 : 14
+                self.walkFootLift = isEvenStep ? 4 : 3
+                self.walkStride = isEvenStep ? 3 : -3
+                self.bodyOffsetY = isEvenStep ? -3 : -1
+                self.squashScale = isEvenStep ? 1.01 : 0.99
+                self.shadowScale = isEvenStep ? 0.9 : 1.02
+                self.leftArmWave = isEvenStep ? 12 : -10
+                self.rightArmWave = isEvenStep ? -12 : 10
                 self.leftArmRaised = false
                 self.rightArmRaised = false
             }
@@ -609,24 +594,51 @@ final class PandaViewModel: ObservableObject {
     }
 
     private func idleWave() {
-        withAnimation(.easeInOut(duration: 0.3)) {
+        playFriendlyWave()
+    }
+
+    private func playFriendlyWave() {
+        let duration: TimeInterval = 1.8
+        let startedAt = Date()
+
+        withAnimation(.spring(response: 0.44, dampingFraction: 0.82)) {
+            greetingWave = true
             rightArmRaised = true
             mouthShape = .grin
+            blushVisible = true
+            headTilt = -2
+            bodyOffsetY = -1
+            squashScale = 1.01
         }
-        var waves = 0
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.42, repeats: true) { [weak self] timer in
-            guard let self = self else { timer.invalidate(); return }
-            waves += 1
-            withAnimation(.easeInOut(duration: 0.22)) {
-                self.rightArmWave = waves % 2 == 0 ? 25 : -25
-                self.headTilt = waves % 2 == 0 ? 4 : -4
-            }
-            if waves >= 5 {
+
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
+            guard let self = self else {
                 timer.invalidate()
-                withAnimation(.easeInOut(duration: 0.3)) {
+                return
+            }
+
+            let elapsed = Date().timeIntervalSince(startedAt)
+            let progress = min(1.0, elapsed / duration)
+            let fadeIn = min(1.0, progress / 0.18)
+            let fadeOut = min(1.0, (1.0 - progress) / 0.22)
+            let envelope = min(fadeIn, fadeOut)
+            let wavePhase = elapsed * 2.0 * .pi * 2.7
+            let bouncePhase = elapsed * 2.0 * .pi * 1.35
+
+            self.rightArmWave = sin(wavePhase) * 10 * envelope
+            self.headTilt = -2 + sin(bouncePhase) * 1.5 * envelope
+            self.bodyOffsetY = -1 - CGFloat(max(0, sin(bouncePhase))) * 1.5 * CGFloat(envelope)
+
+            if progress >= 1.0 {
+                timer.invalidate()
+                withAnimation(.spring(response: 0.48, dampingFraction: 0.86)) {
+                    self.greetingWave = false
                     self.rightArmRaised = false
                     self.rightArmWave = 0
                     self.headTilt = 0
+                    self.bodyOffsetY = 0
+                    self.squashScale = 1.0
+                    self.blushVisible = false
                     self.mouthShape = .smile
                 }
                 self.finishAnimation()
@@ -818,39 +830,6 @@ final class PandaViewModel: ObservableObject {
             }
         }
         registerTimer(timer)
-    }
-
-    private func idlePeekABoo() {
-        withAnimation(.easeInOut(duration: 0.35)) {
-            leftArmRaised = true
-            rightArmRaised = true
-            eyesClosed = true
-            leftArmWave = -60
-            rightArmWave = 60
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                self.eyesClosed = false
-                self.eyesWide = true
-                self.leftArmWave = -30
-                self.rightArmWave = 30
-                self.mouthShape = .ohh
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-            withAnimation(.easeInOut(duration: 0.35)) {
-                self.leftArmRaised = false
-                self.rightArmRaised = false
-                self.leftArmWave = 0
-                self.rightArmWave = 0
-                self.eyesWide = false
-                self.mouthShape = .grin
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                withAnimation { self.mouthShape = .smile }
-                self.finishAnimation()
-            }
-        }
     }
 
     private func idleSneeze() {

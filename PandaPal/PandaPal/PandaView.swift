@@ -100,8 +100,13 @@ struct PandaView: View {
             if !viewModel.leftArmRaised {
                 arm(side: -1, raised: false, wave: viewModel.leftArmWave, inLap: viewModel.pawsInLap)
             }
-            if !viewModel.rightArmRaised {
-                arm(side: 1, raised: false, wave: viewModel.rightArmWave, inLap: viewModel.pawsInLap)
+            if !viewModel.rightArmRaised || viewModel.greetingWave {
+                arm(
+                    side: 1,
+                    raised: viewModel.greetingWave,
+                    wave: viewModel.rightArmWave,
+                    inLap: viewModel.greetingWave ? false : viewModel.pawsInLap
+                )
             }
 
             // Head
@@ -112,7 +117,7 @@ struct PandaView: View {
             if viewModel.leftArmRaised {
                 arm(side: -1, raised: true, wave: viewModel.leftArmWave, inLap: false)
             }
-            if viewModel.rightArmRaised {
+            if viewModel.rightArmRaised && !viewModel.greetingWave {
                 arm(side: 1, raised: true, wave: viewModel.rightArmWave, inLap: false)
             }
 
