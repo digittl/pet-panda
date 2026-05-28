@@ -25,27 +25,6 @@ struct PandaContainerView: View {
         }
         .frame(width: 180 * viewModel.size.multiplier, height: 200 * viewModel.size.multiplier)
         .contentShape(Rectangle())
-        .contextMenu {
-            Button("Pet") {
-                viewModel.pet()
-            }
-
-            Button("Walk") {
-                viewModel.forceWander()
-            }
-
-            Button("Feed") {
-                viewModel.feedBamboo()
-            }
-
-            Menu("Size") {
-                ForEach(PandaSize.allCases, id: \.self) { size in
-                    Button(size.label + (viewModel.size == size ? " (Current)" : "")) {
-                        viewModel.requestSize(size)
-                    }
-                }
-            }
-        }
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in

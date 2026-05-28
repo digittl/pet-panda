@@ -34,7 +34,7 @@ final class PandaWindowController: NSWindowController {
         self.init(window: panel)
         viewModel.size = storedSize
 
-        let hostingView = NSHostingView(rootView: PandaContainerView(viewModel: viewModel))
+        let hostingView = PandaHostingView(rootView: PandaContainerView(viewModel: viewModel))
         hostingView.frame = panel.contentView!.bounds
         hostingView.autoresizingMask = [.width, .height]
         panel.contentView = hostingView
@@ -57,6 +57,10 @@ final class PandaWindowController: NSWindowController {
 
         viewModel.onSizeSelected = { [weak self] size in
             self?.setSize(size)
+        }
+
+        hostingView.onRightClick = { [weak self] event in
+            self?.showContextMenu(for: event)
         }
 
         restorePosition()
@@ -181,5 +185,68 @@ final class PandaWindowController: NSWindowController {
     override func showWindow(_ sender: Any?) {
         super.showWindow(sender)
         window?.orderFrontRegardless()
+    }
+
+    private func showContextMenu(for event: NSEvent) {
+        guard let view = window?.contentView else { return }
+        let menu = NSMenu()
+
+        let pet = NSMenuItem(title: "Pet", action: #selector(menuPet), keyEquivalent: "")
+        pet.target = self
+        menu.addItem(pet)
+
+        let walk = NSMenuItem(title: "Walk", action: #selector(menuWalk), keyEquivalent: "")
+        walk.target = self
+        menu.addItem(walk)
+
+        let feed = NSMenuItem(title: "Feed", action: #selector(menuFeed), keyEquivalent: "")
+        feed.target = self
+        menu.addItem(feed)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let sizeItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
+        let sizeMenu = NSMenu()
+        for size in PandaSize.allCases {
+            let item = NSMenuItem(title: size.label, action: #selector(menuSize(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = size.rawValue
+            item.state = viewModel.size == size ? .on : .off
+            sizeMenu.addItem(item)
+        }
+        sizeItem.submenu = sizeMenu
+        menu.addItem(sizeItem)
+
+        NSMenu.popUpContextMenu(menu, with: event, for: view)
+    }
+
+    @objc private func menuPet() {
+        viewModel.pet()
+    }
+
+    @objc private func menuWalk() {
+        viewModel.forceWander()
+    }
+
+    @objc private func menuFeed() {
+        viewModel.feedBamboo()
+    }
+
+    @objc private func menuSize(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let size = PandaSize(rawValue: raw) else { return }
+        setSize(size)
+    }
+}
+
+final class PandaHostingView<Content: View>: NSHostingView<Content> {
+    var onRightClick: ((NSEvent) -> Void)?
+
+    override func rightMouseDown(with event: NSEvent) {
+        onRightClick?(event)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        onRightClick?(event)
+        return nil
     }
 }

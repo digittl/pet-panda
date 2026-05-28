@@ -93,27 +93,26 @@ struct PandaView: View {
                 leg(side: 1)
             }
 
-            // Arms — folded together in lap when zen, otherwise normal
-            if viewModel.pawsInLap {
-                PawsInLap()
-                    .offset(y: 30)
-                    .transition(.opacity)
-            } else {
-                arm(side: -1, raised: viewModel.leftArmRaised, wave: viewModel.leftArmWave)
-                arm(side: 1, raised: viewModel.rightArmRaised, wave: viewModel.rightArmWave)
-            }
-
-            // Bamboo (held during eating)
-            if viewModel.bambooVisible {
-                BambooStick()
-                    .offset(x: 0, y: -2)
-                    .rotationEffect(.degrees(viewModel.bambooTilt))
-                    .scaleEffect(viewModel.bambooScale)
-                    .transition(.scale.combined(with: .opacity))
-            }
+            // Arms — always behind the head so they never cover the face.
+            arm(side: -1, pose: armPose(raised: viewModel.leftArmRaised), wave: viewModel.leftArmWave)
+            arm(side: 1, pose: armPose(raised: viewModel.rightArmRaised), wave: viewModel.rightArmWave)
 
             // Head
             head
+
+            // Bamboo (held during eating) — flies in from upper-right and
+            // settles at chest level, where her resting arms naturally come up
+            // from the sides to meet it. No extra hand overlays needed.
+            if viewModel.bambooVisible {
+                BambooStick()
+                    .rotationEffect(.degrees(viewModel.bambooTilt))
+                    .scaleEffect(viewModel.bambooScale)
+                    .offset(
+                        x: viewModel.bambooEntryOffset.width,
+                        y: 26 + viewModel.bambooEntryOffset.height
+                    )
+                    .transition(.opacity)
+            }
         }
         .scaleEffect(y: viewModel.squashScale, anchor: .bottom)
     }
@@ -126,16 +125,46 @@ struct PandaView: View {
 
             // Cute pink bow on top of head (always-on accessory)
             PandaBow()
-                .offset(x: 16, y: -44)
-                .rotationEffect(.degrees(-12))
+                .offset(x: 15, y: -49)
+                .rotationEffect(.degrees(-10))
 
-            // Head shape
+            // Head shape — multi-layered for high-def depth.
             Circle()
                 .fill(bodyFill)
                 .frame(width: 70, height: 70)
                 .offset(y: -12)
                 .shadow(color: Color.white.opacity(0.6), radius: 4, x: -2, y: -3)
                 .shadow(color: Color.black.opacity(0.12), radius: 5, x: 1.5, y: 2)
+                .overlay(
+                    // Top-left rim light — soft fur sheen toward the light source.
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [Color.white.opacity(0.75), Color.white.opacity(0)],
+                                center: UnitPoint(x: 0.25, y: 0.18),
+                                startRadius: 1,
+                                endRadius: 28
+                            )
+                        )
+                        .frame(width: 66, height: 66)
+                        .offset(y: -12)
+                        .blendMode(.screen)
+                )
+                .overlay(
+                    // Bottom-right inner shadow — gives the head volume.
+                    Circle()
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [Color.clear, Color.clear, Color.black.opacity(0.18)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 6
+                        )
+                        .frame(width: 70, height: 70)
+                        .offset(y: -12)
+                        .blur(radius: 2.5)
+                )
                 .overlay(
                     Circle()
                         .stroke(outline, lineWidth: 1.8)
@@ -160,14 +189,14 @@ struct PandaView: View {
 
             // Cheeks (always faintly visible)
             Circle()
-                .fill(Color.pink.opacity(viewModel.blushVisible ? 0.55 : 0.18))
-                .frame(width: 11, height: 9)
+                .fill(Color.pink.opacity(viewModel.blushVisible ? 0.6 : 0.32))
+                .frame(width: 13, height: 10)
                 .offset(x: -22, y: -2)
                 .blur(radius: 1)
 
             Circle()
-                .fill(Color.pink.opacity(viewModel.blushVisible ? 0.55 : 0.18))
-                .frame(width: 11, height: 9)
+                .fill(Color.pink.opacity(viewModel.blushVisible ? 0.6 : 0.32))
+                .frame(width: 13, height: 10)
                 .offset(x: 22, y: -2)
                 .blur(radius: 1)
 
@@ -183,15 +212,37 @@ struct PandaView: View {
                         .offset(y: 2)
                 )
 
-            // Nose
+            // Nose — teardrop with proper specular highlights.
             ZStack {
+                NoseShape()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.18, green: 0.13, blue: 0.13),
+                                Color(red: 0.04, green: 0.03, blue: 0.03)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 10, height: 7)
+                    .overlay(
+                        NoseShape()
+                            .stroke(Color.black.opacity(0.7), lineWidth: 0.6)
+                            .frame(width: 10, height: 7)
+                    )
+                    .shadow(color: Color.black.opacity(0.35), radius: 1.2, x: 0, y: 0.6)
+
                 Ellipse()
-                    .fill(Color(white: 0.12))
-                    .frame(width: 9, height: 6)
+                    .fill(Color.white.opacity(0.78))
+                    .frame(width: 3.4, height: 1.8)
+                    .offset(x: -1.8, y: -1.4)
+                    .blur(radius: 0.2)
+
                 Ellipse()
-                    .fill(Color.white.opacity(0.5))
-                    .frame(width: 3, height: 1.5)
-                    .offset(x: -1.5, y: -1)
+                    .fill(Color.white.opacity(0.45))
+                    .frame(width: 1.4, height: 0.9)
+                    .offset(x: 1.4, y: 0.6)
             }
             .offset(y: -3)
 
@@ -281,14 +332,14 @@ struct PandaView: View {
                 // Big highlight
                 Circle()
                     .fill(Color.white)
-                    .frame(width: 3.2, height: 3.2)
+                    .frame(width: 4.2, height: 4.2)
                     .offset(x: -1.6 + lookX * 0.3, y: -1.6 + lookY * 0.3)
 
                 // Tiny secondary highlight
                 Circle()
-                    .fill(Color.white.opacity(0.85))
-                    .frame(width: 1.6, height: 1.6)
-                    .offset(x: 1.8 + lookX * 0.3, y: 1.4 + lookY * 0.3)
+                    .fill(Color.white.opacity(0.9))
+                    .frame(width: 2.2, height: 2.2)
+                    .offset(x: 2.0 + lookX * 0.3, y: 1.6 + lookY * 0.3)
             }
             .offset(x: baseX + lookX * 0.5, y: -14 + lookY * 0.5)
         }
@@ -368,35 +419,164 @@ struct PandaView: View {
         .offset(x: 14 * side + stride, y: 54 - lift)
     }
 
-    private func arm(side: CGFloat, raised: Bool, wave: Double) -> some View {
-        // Keep arm rotation modest so it never tucks behind the body or
-        // disappears off the side. `raised` adds a fixed upward swing, then
-        // `wave` adds a small extra swing within sensible bounds.
-        let baseDown: Double = side == -1 ? 18 : -18
-        let baseUp: Double = side == -1 ? -22 : 22
-        let base = raised ? baseUp : baseDown
-        let clampedWave = max(-25, min(25, wave))
-        let angle = base + clampedWave
-
-        return ZStack {
-            Capsule()
+    private func gripHand(side: CGFloat) -> some View {
+        ZStack {
+            Circle()
                 .fill(darkFill)
-                .frame(width: 18, height: 32)
+                .frame(width: 13, height: 12)
                 .overlay(
-                    Capsule()
-                        .fill(Color.white.opacity(0.12))
-                        .frame(width: 4, height: 20)
-                        .offset(x: -4 * side, y: -4)
-                        .blur(radius: 0.5)
+                    Circle()
+                        .stroke(outline, lineWidth: 1)
                 )
+                .shadow(color: Color.black.opacity(0.2), radius: 1.5, x: 0, y: 1)
 
             Circle()
-                .fill(Color.pink.opacity(0.38))
-                .frame(width: 7, height: 5)
-                .offset(y: 12)
+                .fill(Color.pink.opacity(0.55))
+                .frame(width: 5, height: 4)
+                .offset(y: 1.5)
         }
-        .rotationEffect(.degrees(angle), anchor: UnitPoint(x: 0.5, y: 0.15))
-        .offset(x: 30 * side, y: raised ? 6 : 16)
+        .offset(
+            x: 8 * side + viewModel.bambooEntryOffset.width * 0.4,
+            y: 16 + viewModel.bambooEntryOffset.height * 0.4
+        )
+        .transition(.opacity)
+    }
+
+    private func armPose(raised: Bool) -> ArmPose {
+        if viewModel.pawsInLap {
+            return .lap
+        }
+        return raised ? .raised : .rest
+    }
+
+    private func arm(side: CGFloat, pose: ArmPose, wave: Double) -> some View {
+        ArticulatedArm(
+            side: side,
+            pose: pose,
+            wave: wave,
+            darkFill: darkFill,
+            outline: outline
+        )
+    }
+}
+
+enum ArmPose {
+    case rest, raised, lap
+}
+
+private struct ArticulatedArm: View {
+    let side: CGFloat
+    let pose: ArmPose
+    let wave: Double
+    let darkFill: LinearGradient
+    let outline: Color
+
+    private let upperLength: CGFloat = 17
+    private let lowerLength: CGFloat = 15
+    private let upperWidth: CGFloat = 15
+    private let lowerWidth: CGFloat = 14
+    private let handDiameter: CGFloat = 14
+
+    private var shoulderAngle: Double {
+        // Angle measured from straight-down. Positive = elbow swings toward
+        // the centre of the body.
+        switch pose {
+        case .rest: return side == -1 ? 30 : -30
+        case .raised: return side == -1 ? 50 : -50
+        case .lap: return side == -1 ? 52 : -52
+        }
+    }
+
+    private var elbowBend: Double {
+        // Relative to the upper arm.
+        switch pose {
+        case .rest: return side == -1 ? -6 : 6
+        case .raised: return side == -1 ? -30 : 30
+        case .lap: return side == -1 ? -28 : 28
+        }
+    }
+
+    private var upperAngle: Double {
+        let clampedWave = max(-35, min(35, wave))
+        return shoulderAngle + clampedWave
+    }
+
+    private var lowerAngle: Double { upperAngle + elbowBend }
+
+    private var shoulder: CGPoint { CGPoint(x: 23 * side, y: 5) }
+
+    private var elbow: CGPoint {
+        let rad = upperAngle * .pi / 180
+        return CGPoint(
+            x: shoulder.x + upperLength * CGFloat(sin(rad)),
+            y: shoulder.y + upperLength * CGFloat(cos(rad))
+        )
+    }
+
+    private var hand: CGPoint {
+        let rad = lowerAngle * .pi / 180
+        return CGPoint(
+            x: elbow.x + lowerLength * CGFloat(sin(rad)),
+            y: elbow.y + lowerLength * CGFloat(cos(rad))
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            // Upper arm: shoulder → elbow.
+            segment(from: shoulder, to: elbow, width: upperWidth)
+
+            // Elbow joint cap — covers the seam where the two segments meet.
+            Circle()
+                .fill(darkFill)
+                .frame(width: upperWidth - 1, height: upperWidth - 1)
+                .overlay(
+                    Circle().stroke(outline, lineWidth: 0.8)
+                )
+                .position(elbow)
+
+            // Lower arm: elbow → hand.
+            segment(from: elbow, to: hand, width: lowerWidth)
+
+            // Hand.
+            ZStack {
+                Circle()
+                    .fill(darkFill)
+                    .frame(width: handDiameter, height: handDiameter)
+                    .overlay(
+                        Circle().stroke(outline, lineWidth: 1)
+                    )
+
+                Circle()
+                    .fill(Color.pink.opacity(0.55))
+                    .frame(width: 5, height: 4)
+                    .offset(y: 1.5)
+            }
+            .position(hand)
+        }
+        // The ZStack auto-sizes to its largest child. Give it a generous fixed
+        // frame so .position coordinates are interpreted in panda-local space
+        // with (0,0) at the centre.
+        .frame(width: 1, height: 1)
+    }
+
+    private func segment(from start: CGPoint, to end: CGPoint, width: CGFloat) -> some View {
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let length = hypot(dx, dy)
+        let angle = atan2(dy, dx) * 180 / .pi - 90 // capsule's long axis is vertical
+
+        return Capsule()
+            .fill(darkFill)
+            .frame(width: width, height: length + width * 0.4)
+            .overlay(
+                Capsule().stroke(outline, lineWidth: 1)
+            )
+            .rotationEffect(.degrees(angle))
+            .position(
+                x: (start.x + end.x) / 2,
+                y: (start.y + end.y) / 2
+            )
     }
 }
 
@@ -517,72 +697,310 @@ struct PawsInLap: View {
 }
 
 struct Cushion: View {
+    private let topFill = LinearGradient(
+        colors: [
+            Color(red: 0.99, green: 0.78, blue: 0.9),
+            Color(red: 0.93, green: 0.58, blue: 0.75),
+            Color(red: 0.82, green: 0.4, blue: 0.6)
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+
+    private let sideFill = LinearGradient(
+        colors: [
+            Color(red: 0.78, green: 0.36, blue: 0.55),
+            Color(red: 0.62, green: 0.22, blue: 0.42)
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+
+    private let trim = Color(red: 0.55, green: 0.15, blue: 0.32).opacity(0.85)
+
     var body: some View {
         ZStack {
-            // Cushion body
-            RoundedRectangle(cornerRadius: 14)
-                .fill(LinearGradient(
-                    colors: [
-                        Color(red: 0.95, green: 0.7, blue: 0.85),
-                        Color(red: 0.85, green: 0.45, blue: 0.65)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ))
-                .frame(width: 92, height: 28)
+            // Ground shadow under the cushion gives it weight.
+            Ellipse()
+                .fill(Color.black.opacity(0.22))
+                .frame(width: 100, height: 12)
+                .blur(radius: 4)
+                .offset(y: 14)
+
+            // Cushion side band — gives the pillow its depth.
+            RoundedRectangle(cornerRadius: 16)
+                .fill(sideFill)
+                .frame(width: 96, height: 30)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(Color(red: 0.65, green: 0.25, blue: 0.45).opacity(0.5), lineWidth: 1.2)
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(trim, lineWidth: 1.2)
                 )
+                .offset(y: 6)
 
-            // Top highlight stripe
+            // Plump top cushion — slight squash so it reads as soft.
+            Ellipse()
+                .fill(topFill)
+                .frame(width: 100, height: 34)
+                .overlay(
+                    Ellipse()
+                        .stroke(trim, lineWidth: 1.4)
+                )
+                .shadow(color: Color.white.opacity(0.5), radius: 3, x: -2, y: -2)
+                .shadow(color: Color.black.opacity(0.18), radius: 3, x: 2, y: 3)
+
+            // Quilted top highlight — long soft sheen.
+            Ellipse()
+                .fill(Color.white.opacity(0.55))
+                .frame(width: 72, height: 8)
+                .offset(y: -9)
+                .blur(radius: 2)
+
+            // Stitched piping running across the top — adds tufted detail.
             Capsule()
-                .fill(Color.white.opacity(0.35))
-                .frame(width: 60, height: 4)
-                .offset(y: -7)
-                .blur(radius: 1.5)
+                .stroke(Color.white.opacity(0.35), style: StrokeStyle(lineWidth: 0.7, dash: [2, 2.5]))
+                .frame(width: 80, height: 14)
+                .offset(y: -2)
 
-            // Tassels
-            ForEach(0..<2, id: \.self) { i in
+            // Centre tuft button — the hallmark of a real cushion.
+            ZStack {
                 Circle()
-                    .fill(Color(red: 0.85, green: 0.4, blue: 0.6))
-                    .frame(width: 6, height: 6)
-                    .offset(x: i == 0 ? -46 : 46, y: 2)
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color(red: 0.7, green: 0.22, blue: 0.42),
+                                Color(red: 0.45, green: 0.1, blue: 0.25)
+                            ],
+                            center: .topLeading,
+                            startRadius: 1,
+                            endRadius: 6
+                        )
+                    )
+                    .frame(width: 8, height: 8)
+                    .overlay(
+                        Circle()
+                            .stroke(trim, lineWidth: 0.8)
+                    )
+
+                Circle()
+                    .fill(Color.white.opacity(0.65))
+                    .frame(width: 2.4, height: 2.4)
+                    .offset(x: -1.4, y: -1.4)
+            }
+            .shadow(color: Color.black.opacity(0.25), radius: 1.5, x: 0, y: 1)
+
+            // Corner tassels — full pom-poms with hanging strands.
+            ForEach(0..<2, id: \.self) { i in
+                let xSign: CGFloat = i == 0 ? -1 : 1
+                CushionTassel()
+                    .offset(x: xSign * 50, y: 4)
+            }
+        }
+    }
+}
+
+private struct CushionTassel: View {
+    var body: some View {
+        ZStack {
+            // Knot at the cushion edge.
+            Capsule()
+                .fill(Color(red: 0.55, green: 0.15, blue: 0.32))
+                .frame(width: 5, height: 4)
+                .offset(y: -2)
+
+            // Fluffy pom-pom.
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 1.0, green: 0.78, blue: 0.88),
+                            Color(red: 0.85, green: 0.4, blue: 0.6)
+                        ],
+                        center: .topLeading,
+                        startRadius: 1,
+                        endRadius: 8
+                    )
+                )
+                .frame(width: 10, height: 10)
+                .overlay(
+                    Circle()
+                        .stroke(Color(red: 0.55, green: 0.15, blue: 0.32).opacity(0.55), lineWidth: 0.8)
+                )
+                .shadow(color: Color.black.opacity(0.18), radius: 1.5, x: 0, y: 1)
+                .offset(y: 4)
+
+            // Tiny dangling strands.
+            ForEach(0..<3, id: \.self) { i in
+                Capsule()
+                    .fill(Color(red: 0.65, green: 0.22, blue: 0.4))
+                    .frame(width: 1, height: 4)
+                    .offset(x: CGFloat(i - 1) * 2.5, y: 11)
             }
         }
     }
 }
 
 struct PandaBow: View {
+    private let ribbonFill = LinearGradient(
+        colors: [
+            Color(red: 1.0, green: 0.62, blue: 0.78),
+            Color(red: 0.98, green: 0.42, blue: 0.6),
+            Color(red: 0.85, green: 0.22, blue: 0.42)
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+
+    private let ribbonOutline = Color(red: 0.55, green: 0.08, blue: 0.22).opacity(0.85)
+
     var body: some View {
         ZStack {
+            // Ribbon tails dangling below the knot.
+            ribbonTail(side: -1)
+            ribbonTail(side: 1)
+
             // Left loop
-            Ellipse()
-                .fill(LinearGradient(
-                    colors: [Color(red: 1.0, green: 0.55, blue: 0.7), Color(red: 0.95, green: 0.35, blue: 0.55)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ))
-                .frame(width: 10, height: 7)
-                .offset(x: -4)
-                .rotationEffect(.degrees(-15))
+            loop(side: -1)
 
             // Right loop
-            Ellipse()
-                .fill(LinearGradient(
-                    colors: [Color(red: 1.0, green: 0.55, blue: 0.7), Color(red: 0.95, green: 0.35, blue: 0.55)],
-                    startPoint: .topTrailing,
-                    endPoint: .bottomLeading
-                ))
-                .frame(width: 10, height: 7)
-                .offset(x: 4)
-                .rotationEffect(.degrees(15))
+            loop(side: 1)
 
-            // Center knot
-            Circle()
-                .fill(Color(red: 0.95, green: 0.35, blue: 0.55))
-                .frame(width: 4, height: 4)
+            // Center knot — wraps the join so the loops read as a single bow.
+            RoundedRectangle(cornerRadius: 3)
+                .fill(ribbonFill)
+                .frame(width: 9, height: 12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 3)
+                        .stroke(ribbonOutline, lineWidth: 1.3)
+                )
+                .overlay(
+                    // Knot crease — vertical pinches that sell the wrap.
+                    HStack(spacing: 1.5) {
+                        Capsule().fill(Color.black.opacity(0.25)).frame(width: 0.8, height: 8)
+                        Capsule().fill(Color.white.opacity(0.55)).frame(width: 1.4, height: 8)
+                        Capsule().fill(Color.black.opacity(0.25)).frame(width: 0.8, height: 8)
+                    }
+                )
+                .shadow(color: Color.black.opacity(0.25), radius: 1.5, x: 0, y: 1)
         }
+        .shadow(color: Color.black.opacity(0.28), radius: 2.5, x: 0, y: 2)
+    }
+
+    private func loop(side: CGFloat) -> some View {
+        // Each loop is a teardrop pinched at the knot (inner) side and
+        // bulging outward — mirrored per side to form a classic bow.
+        ZStack {
+            BowLoop()
+                .fill(ribbonFill)
+                .overlay(
+                    BowLoop()
+                        .stroke(ribbonOutline, lineWidth: 1.4)
+                )
+                .overlay(
+                    // Top sheen inside the loop.
+                    Ellipse()
+                        .fill(Color.white.opacity(0.55))
+                        .frame(width: 9, height: 4)
+                        .offset(x: 3, y: -3.5)
+                        .blur(radius: 0.7)
+                )
+                .overlay(
+                    // Inner crease near the knot — sells the pinch.
+                    BowLoop()
+                        .stroke(
+                            LinearGradient(
+                                colors: [Color.black.opacity(0.45), Color.clear],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ),
+                            lineWidth: 2
+                        )
+                        .blur(radius: 0.9)
+                )
+        }
+        .frame(width: 18, height: 16)
+        .scaleEffect(x: side, y: 1)
+        .offset(x: 8 * side)
+        .rotationEffect(.degrees(side == -1 ? -8 : 8))
+    }
+
+    private func ribbonTail(side: CGFloat) -> some View {
+        RibbonTail()
+            .fill(ribbonFill)
+            .frame(width: 6, height: 9)
+            .overlay(
+                RibbonTail()
+                    .stroke(ribbonOutline, lineWidth: 1)
+            )
+            .rotationEffect(.degrees(side == -1 ? -12 : 12))
+            .offset(x: 3 * side, y: 7)
+    }
+}
+
+private struct NoseShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        // Soft teardrop — wider at the top, narrower at the bottom.
+        var path = Path()
+        let top = CGPoint(x: rect.midX, y: rect.minY)
+        let bottom = CGPoint(x: rect.midX, y: rect.maxY)
+        let leftCtrlTop = CGPoint(x: rect.minX - rect.width * 0.05, y: rect.minY + rect.height * 0.2)
+        let leftCtrlBottom = CGPoint(x: rect.midX - rect.width * 0.25, y: rect.maxY)
+        let rightCtrlBottom = CGPoint(x: rect.midX + rect.width * 0.25, y: rect.maxY)
+        let rightCtrlTop = CGPoint(x: rect.maxX + rect.width * 0.05, y: rect.minY + rect.height * 0.2)
+
+        path.move(to: top)
+        path.addCurve(to: bottom, control1: leftCtrlTop, control2: leftCtrlBottom)
+        path.addCurve(to: top, control1: rightCtrlBottom, control2: rightCtrlTop)
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct BowLoop: Shape {
+    func path(in rect: CGRect) -> Path {
+        // Pinched on the LEFT (knot side), bulging out on the right —
+        // classic ribbon-loop silhouette.
+        var path = Path()
+        let knot = CGPoint(x: rect.minX, y: rect.midY)
+        let topOuter = CGPoint(x: rect.maxX * 0.85, y: rect.minY)
+        let outerMid = CGPoint(x: rect.maxX, y: rect.midY)
+        let bottomOuter = CGPoint(x: rect.maxX * 0.85, y: rect.maxY)
+
+        path.move(to: knot)
+        // Top edge of the loop swoops up and out.
+        path.addCurve(
+            to: topOuter,
+            control1: CGPoint(x: rect.midX * 0.4, y: rect.minY + rect.height * 0.05),
+            control2: CGPoint(x: rect.midX * 0.7, y: rect.minY)
+        )
+        // Outer rounded edge of the loop.
+        path.addQuadCurve(
+            to: outerMid,
+            control: CGPoint(x: rect.maxX + rect.width * 0.08, y: rect.minY + rect.height * 0.18)
+        )
+        path.addQuadCurve(
+            to: bottomOuter,
+            control: CGPoint(x: rect.maxX + rect.width * 0.08, y: rect.maxY - rect.height * 0.18)
+        )
+        // Bottom edge swoops back to the knot.
+        path.addCurve(
+            to: knot,
+            control1: CGPoint(x: rect.midX * 0.7, y: rect.maxY),
+            control2: CGPoint(x: rect.midX * 0.4, y: rect.maxY - rect.height * 0.05)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct RibbonTail: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY - rect.height * 0.35))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 

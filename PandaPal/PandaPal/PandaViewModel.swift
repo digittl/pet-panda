@@ -92,6 +92,7 @@ final class PandaViewModel: ObservableObject {
     @Published var bambooVisible: Bool = false
     @Published var bambooTilt: Double = 0
     @Published var bambooScale: CGFloat = 1.0
+    @Published var bambooEntryOffset: CGSize = .zero
     @Published var walkStride: CGFloat = 0
     @Published var walkFootLift: CGFloat = 0
     @Published var leadingPawSide: CGFloat = -1
@@ -115,6 +116,7 @@ final class PandaViewModel: ObservableObject {
     private var idleTimer: Timer?
     private var wanderTimer: Timer?
     private var activeTimers: [Timer] = []
+    private var dragFlailTimer: Timer?
     private var isBusy = false
 
     private func registerTimer(_ timer: Timer) {
@@ -200,15 +202,49 @@ final class PandaViewModel: ObservableObject {
         isDragging = true
 
         withAnimation(.spring(response: 0.25, dampingFraction: 0.5)) {
-            leftArmRaised = true
-            rightArmRaised = true
-            leftArmWave = -30
-            rightArmWave = 30
+            // Arms hang at the sides — the flail timer will swing them
+            // wildly while she's airborne.
+            leftArmRaised = false
+            rightArmRaised = false
             eyesWide = true
             mouthShape = .ohh
             bodyOffsetY = -4
             squashScale = 1.04
         }
+
+        startDragFlail()
+    }
+
+    private func startDragFlail() {
+        dragFlailTimer?.invalidate()
+        var tick = 0
+        let timer = Timer(timeInterval: 0.09, repeats: true) { [weak self] _ in
+            guard let self = self, self.isDragging else { return }
+            tick += 1
+
+            // Big alternating swings — both arms and both legs flail like
+            // she's screaming AHHHH while being held in the air.
+            let phase = tick % 2 == 0 ? 1.0 : -1.0
+            let jitter = Double.random(in: -8...8)
+            let legJitter = CGFloat.random(in: -3...3)
+
+            withAnimation(.spring(response: 0.11, dampingFraction: 0.45)) {
+                self.leftArmWave = phase * -34 + jitter
+                self.rightArmWave = phase * 34 + jitter
+                self.walkStride = CGFloat(phase) * 5 + legJitter
+                self.walkFootLift = CGFloat(6 + abs(legJitter))
+                self.leadingPawSide = phase > 0 ? -1 : 1
+                self.headTilt = phase * 4
+                self.earWiggle = CGFloat(phase * 3)
+            }
+        }
+        dragFlailTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func stopDragFlail() {
+        dragFlailTimer?.invalidate()
+        dragFlailTimer = nil
     }
 
     func updateDrag(velocityX: CGFloat) {
@@ -223,12 +259,17 @@ final class PandaViewModel: ObservableObject {
     func endDrag() {
         isDragging = false
         onDragEnded?()
+        stopDragFlail()
 
-        // Sway settles to 0
+        // Sway and flailing settle to 0.
         withAnimation(.spring(response: 0.4, dampingFraction: 0.55)) {
             dragSway = 0
             leftArmWave = 0
             rightArmWave = 0
+            walkStride = 0
+            walkFootLift = 0
+            earWiggle = 0
+            headTilt = 0
             lookDirection = 0
         }
 
@@ -272,7 +313,7 @@ final class PandaViewModel: ObservableObject {
 
     private func scheduleNextWander(initial: Bool = false) {
         wanderTimer?.invalidate()
-        let delay = initial ? Double.random(in: 2.5...5) : Double.random(in: 12...24)
+        let delay = initial ? Double.random(in: 2.0...4.0) : Double.random(in: 10...20)
         let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
             self?.wander()
         }
@@ -289,6 +330,7 @@ final class PandaViewModel: ObservableObject {
         idleTimer = nil
         wanderTimer?.invalidate()
         wanderTimer = nil
+        stopDragFlail()
         cancelActiveTimers()
     }
 
@@ -318,6 +360,7 @@ final class PandaViewModel: ObservableObject {
             earWiggle = 0
             bambooVisible = false
             bambooScale = 1.0
+            bambooEntryOffset = .zero
             walkStride = 0
             walkFootLift = 0
             leadingPawSide = -1
@@ -345,16 +388,115 @@ final class PandaViewModel: ObservableObject {
             { self.idleLookAround() },
             { self.idleYawn() },
             { self.idleEarWiggle() },
-            { self.idleEatBamboo() },
             { self.idlePeekABoo() },
             { self.idleSneeze() },
             { self.idleHumTune() },
             { self.idleBounce() },
             { self.idleSit() },
             { self.idleNapOnCushion() },
-            { self.idleRelax() }
+            { self.idleRelax() },
+            { self.idleTikTokDance() }
         ]
         pool.randomElement()?()
+    }
+
+    private func idleTikTokDance() {
+        let moves = 14
+        var step = 0
+        let stepInterval = 0.42
+
+        withAnimation(.easeInOut(duration: 0.35)) {
+            mouthShape = .grin
+            blushVisible = true
+            eyesWide = false
+        }
+
+        let timer = Timer(timeInterval: stepInterval, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            step += 1
+            let beat = step % 4
+
+            // Longer easeInOut transitions blend the poses smoothly so each
+            // beat flows into the next instead of snapping.
+            withAnimation(.easeInOut(duration: stepInterval * 0.85)) {
+                switch beat {
+                case 1:
+                    // Right hand up, left low — gentle hip pop right.
+                    self.leftArmRaised = false
+                    self.rightArmRaised = true
+                    self.leftArmWave = 8
+                    self.rightArmWave = -6
+                    self.bodyOffsetY = -2
+                    self.headTilt = 4
+                    self.squashScale = 1.02
+                    self.shadowScale = 0.94
+                    self.walkStride = 2
+                    self.walkFootLift = 2
+                    self.leadingPawSide = 1
+                case 2:
+                    // Both arms up — peak moment.
+                    self.leftArmRaised = true
+                    self.rightArmRaised = true
+                    self.leftArmWave = -6
+                    self.rightArmWave = 6
+                    self.bodyOffsetY = -4
+                    self.headTilt = 0
+                    self.squashScale = 0.98
+                    self.shadowScale = 1.04
+                    self.walkStride = 0
+                    self.walkFootLift = 0
+                case 3:
+                    // Left hand up, right low — hip pop left.
+                    self.leftArmRaised = true
+                    self.rightArmRaised = false
+                    self.leftArmWave = -6
+                    self.rightArmWave = 8
+                    self.bodyOffsetY = -2
+                    self.headTilt = -4
+                    self.squashScale = 1.02
+                    self.shadowScale = 0.94
+                    self.walkStride = -2
+                    self.walkFootLift = 2
+                    self.leadingPawSide = -1
+                default:
+                    // Settle.
+                    self.leftArmRaised = false
+                    self.rightArmRaised = false
+                    self.leftArmWave = 0
+                    self.rightArmWave = 0
+                    self.bodyOffsetY = 0
+                    self.headTilt = 0
+                    self.squashScale = 1.0
+                    self.shadowScale = 1.0
+                    self.walkStride = 0
+                    self.walkFootLift = 0
+                }
+            }
+
+            if beat == 2 {
+                self.spawnParticle(.sparkle, at: CGSize(width: CGFloat.random(in: -22...22), height: -28))
+            }
+
+            if step >= moves {
+                timer.invalidate()
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                    self.leftArmRaised = false
+                    self.rightArmRaised = false
+                    self.leftArmWave = 0
+                    self.rightArmWave = 0
+                    self.bodyOffsetY = 0
+                    self.headTilt = 0
+                    self.squashScale = 1.0
+                    self.shadowScale = 1.0
+                    self.walkStride = 0
+                    self.walkFootLift = 0
+                    self.mouthShape = .smile
+                    self.blushVisible = false
+                }
+                self.finishAnimation()
+            }
+        }
+        registerTimer(timer)
     }
 
     // MARK: - Wander
@@ -599,15 +741,22 @@ final class PandaViewModel: ObservableObject {
     }
 
     private func playBambooFeast(celebratory: Bool) {
-        withAnimation(.spring(response: 0.36, dampingFraction: 0.68)) {
-            bambooVisible = true
+        // Bamboo flies in from upper-right toward her hands.
+        bambooEntryOffset = CGSize(width: 70, height: -60)
+        bambooTilt = -85
+        bambooScale = 0.7
+        bambooVisible = true
+
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.7)) {
+            bambooEntryOffset = .zero
             bambooTilt = -20
-            bambooScale = 0.96
+            bambooScale = 1.0
             leftArmRaised = true
             rightArmRaised = true
-            mouthShape = .grin
+            mouthShape = .ohh
             blushVisible = celebratory
-            lookDirection = -2
+            lookDirection = 4
+            lookVertical = -2
             bodyOffsetY = -2
         }
 
@@ -638,6 +787,7 @@ final class PandaViewModel: ObservableObject {
                 withAnimation(.spring(response: 0.42, dampingFraction: 0.76)) {
                     self.bambooVisible = false
                     self.bambooScale = 1.0
+                    self.bambooEntryOffset = .zero
                     self.leftArmRaised = false
                     self.rightArmRaised = false
                     self.mouthShape = celebratory ? .grin : .smile
