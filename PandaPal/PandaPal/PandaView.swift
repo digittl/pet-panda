@@ -100,13 +100,8 @@ struct PandaView: View {
             if !viewModel.leftArmRaised {
                 arm(side: -1, raised: false, wave: viewModel.leftArmWave, inLap: viewModel.pawsInLap)
             }
-            if !viewModel.rightArmRaised || viewModel.greetingWave {
-                arm(
-                    side: 1,
-                    raised: viewModel.greetingWave,
-                    wave: viewModel.rightArmWave,
-                    inLap: viewModel.greetingWave ? false : viewModel.pawsInLap
-                )
+            if !viewModel.rightArmRaised {
+                arm(side: 1, raised: false, wave: viewModel.rightArmWave, inLap: viewModel.pawsInLap)
             }
 
             // Head
@@ -117,8 +112,14 @@ struct PandaView: View {
             if viewModel.leftArmRaised {
                 arm(side: -1, raised: true, wave: viewModel.leftArmWave, inLap: false)
             }
-            if viewModel.rightArmRaised && !viewModel.greetingWave {
-                arm(side: 1, raised: true, wave: viewModel.rightArmWave, inLap: false)
+            if viewModel.rightArmRaised {
+                arm(
+                    side: 1,
+                    raised: true,
+                    wave: viewModel.rightArmWave,
+                    inLap: false,
+                    angleOverride: viewModel.greetingWave ? -115 + viewModel.rightArmWave : nil
+                )
             }
 
             // Bamboo (held during eating) — flies in from upper-right.
@@ -461,7 +462,7 @@ struct PandaView: View {
         .transition(.opacity)
     }
 
-    private func arm(side: CGFloat, raised: Bool, wave: Double, inLap: Bool = false) -> some View {
+    private func arm(side: CGFloat, raised: Bool, wave: Double, inLap: Bool = false, angleOverride: Double? = nil) -> some View {
         // Single chibi capsule per arm. Side-dependent base angles so the
         // right arm rotates inward symmetrically when raised. In the lap
         // pose, the arms tilt strongly toward the centre from their default
@@ -478,7 +479,7 @@ struct PandaView: View {
             base = baseDown
         }
         let clampedWave = max(-25, min(25, wave))
-        let angle = base + clampedWave
+        let angle = angleOverride ?? (base + clampedWave)
 
         return ZStack {
             Capsule()

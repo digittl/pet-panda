@@ -199,7 +199,7 @@ final class PandaWindowController: NSWindowController {
         wave.target = self
         menu.addItem(wave)
 
-        let dance = NSMenuItem(title: "TikTok Dance", action: #selector(menuDance), keyEquivalent: "")
+        let dance = NSMenuItem(title: "Dance", action: #selector(menuDance), keyEquivalent: "")
         dance.target = self
         menu.addItem(dance)
 

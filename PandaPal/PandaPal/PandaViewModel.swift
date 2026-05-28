@@ -425,7 +425,7 @@ final class PandaViewModel: ObservableObject {
     }
 
     private func idleTikTokDance() {
-        let duration: TimeInterval = 4.2
+        let duration: TimeInterval = 5.4
         let startedAt = Date()
         var sparkleBeat = 0
 
@@ -435,7 +435,7 @@ final class PandaViewModel: ObservableObject {
             eyesWide = false
             leftArmRaised = true
             rightArmRaised = true
-            bodyOffsetY = -2
+            bodyOffsetY = -3
         }
 
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
@@ -443,29 +443,33 @@ final class PandaViewModel: ObservableObject {
 
             let elapsed = Date().timeIntervalSince(startedAt)
             let progress = min(1.0, elapsed / duration)
-            let fadeIn = min(1.0, progress / 0.12)
-            let fadeOut = min(1.0, (1.0 - progress) / 0.16)
+            let fadeIn = min(1.0, progress / 0.1)
+            let fadeOut = min(1.0, (1.0 - progress) / 0.14)
             let envelope = min(fadeIn, fadeOut)
-            let shake = sin(elapsed * 2.0 * .pi * 3.4)
-            let counterShake = sin(elapsed * 2.0 * .pi * 3.4 + .pi)
-            let bounce = sin(elapsed * 2.0 * .pi * 1.7)
-            let stepSide: CGFloat = bounce >= 0 ? -1 : 1
+            let armFreq = 4.2
+            let bounceFreq = 2.1
+            let hipFreq = 1.05
+            let shake = sin(elapsed * 2.0 * .pi * armFreq)
+            let counterShake = sin(elapsed * 2.0 * .pi * armFreq + .pi)
+            let bounce = sin(elapsed * 2.0 * .pi * bounceFreq)
+            let hipSway = sin(elapsed * 2.0 * .pi * hipFreq)
+            let stepSide: CGFloat = hipSway >= 0 ? 1 : -1
 
-            self.leftArmWave = shake * 18 * envelope
-            self.rightArmWave = counterShake * 18 * envelope
-            self.bodyRoll = shake * 3 * envelope
-            self.headTilt = counterShake * 4 * envelope
-            self.bodyOffsetY = -2 - CGFloat(max(0, bounce)) * 3 * CGFloat(envelope)
-            self.squashScale = 1.0 + CGFloat(abs(bounce)) * 0.035 * CGFloat(envelope)
-            self.shadowScale = 1.0 - CGFloat(max(0, bounce)) * 0.12 * CGFloat(envelope)
+            self.leftArmWave = shake * 24 * envelope
+            self.rightArmWave = counterShake * 24 * envelope
+            self.bodyRoll = hipSway * 7 * envelope
+            self.headTilt = -hipSway * 9 * envelope + shake * 2 * envelope
+            self.bodyOffsetY = -3 - CGFloat(max(0, bounce)) * 6 * CGFloat(envelope)
+            self.squashScale = 1.0 + CGFloat(max(0, -bounce)) * 0.06 * CGFloat(envelope)
+            self.shadowScale = 1.0 - CGFloat(max(0, bounce)) * 0.18 * CGFloat(envelope)
             self.leadingPawSide = stepSide
-            self.walkStride = stepSide * 4 * CGFloat(envelope)
-            self.walkFootLift = CGFloat(max(0, abs(bounce))) * 4 * CGFloat(envelope)
+            self.walkStride = CGFloat(hipSway) * 7 * CGFloat(envelope)
+            self.walkFootLift = CGFloat(max(0, bounce)) * 6 * CGFloat(envelope)
 
-            let currentSparkleBeat = Int(elapsed / 0.75)
+            let currentSparkleBeat = Int(elapsed / 0.4)
             if currentSparkleBeat > sparkleBeat {
                 sparkleBeat = currentSparkleBeat
-                self.spawnParticle(.sparkle, at: CGSize(width: CGFloat.random(in: -22...22), height: -28))
+                self.spawnParticle(.sparkle, at: CGSize(width: CGFloat.random(in: -28...28), height: CGFloat.random(in: -34 ... -10)))
             }
 
             if progress >= 1.0 {
@@ -598,7 +602,7 @@ final class PandaViewModel: ObservableObject {
     }
 
     private func playFriendlyWave() {
-        let duration: TimeInterval = 1.8
+        let duration: TimeInterval = 2.2
         let startedAt = Date()
 
         withAnimation(.spring(response: 0.44, dampingFraction: 0.82)) {
@@ -606,7 +610,7 @@ final class PandaViewModel: ObservableObject {
             rightArmRaised = true
             mouthShape = .grin
             blushVisible = true
-            headTilt = -2
+            headTilt = -3
             bodyOffsetY = -1
             squashScale = 1.01
         }
@@ -619,15 +623,15 @@ final class PandaViewModel: ObservableObject {
 
             let elapsed = Date().timeIntervalSince(startedAt)
             let progress = min(1.0, elapsed / duration)
-            let fadeIn = min(1.0, progress / 0.18)
-            let fadeOut = min(1.0, (1.0 - progress) / 0.22)
+            let fadeIn = min(1.0, progress / 0.14)
+            let fadeOut = min(1.0, (1.0 - progress) / 0.18)
             let envelope = min(fadeIn, fadeOut)
-            let wavePhase = elapsed * 2.0 * .pi * 2.7
-            let bouncePhase = elapsed * 2.0 * .pi * 1.35
+            let wavePhase = elapsed * 2.0 * .pi * 2.2
+            let bouncePhase = elapsed * 2.0 * .pi * 1.1
 
-            self.rightArmWave = sin(wavePhase) * 10 * envelope
-            self.headTilt = -2 + sin(bouncePhase) * 1.5 * envelope
-            self.bodyOffsetY = -1 - CGFloat(max(0, sin(bouncePhase))) * 1.5 * CGFloat(envelope)
+            self.rightArmWave = sin(wavePhase) * 23 * envelope
+            self.headTilt = -3 + sin(bouncePhase) * 3 * envelope
+            self.bodyOffsetY = -1 - CGFloat(max(0, sin(bouncePhase))) * 2 * CGFloat(envelope)
 
             if progress >= 1.0 {
                 timer.invalidate()
