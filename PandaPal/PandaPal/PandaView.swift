@@ -126,8 +126,8 @@ struct PandaView: View {
 
             // Cute pink bow on top of head (always-on accessory)
             PandaBow()
-                .offset(x: 16, y: -44)
-                .rotationEffect(.degrees(-12))
+                .offset(x: 15, y: -49)
+                .rotationEffect(.degrees(-10))
 
             // Head shape
             Circle()
@@ -160,14 +160,14 @@ struct PandaView: View {
 
             // Cheeks (always faintly visible)
             Circle()
-                .fill(Color.pink.opacity(viewModel.blushVisible ? 0.55 : 0.18))
-                .frame(width: 11, height: 9)
+                .fill(Color.pink.opacity(viewModel.blushVisible ? 0.6 : 0.32))
+                .frame(width: 13, height: 10)
                 .offset(x: -22, y: -2)
                 .blur(radius: 1)
 
             Circle()
-                .fill(Color.pink.opacity(viewModel.blushVisible ? 0.55 : 0.18))
-                .frame(width: 11, height: 9)
+                .fill(Color.pink.opacity(viewModel.blushVisible ? 0.6 : 0.32))
+                .frame(width: 13, height: 10)
                 .offset(x: 22, y: -2)
                 .blur(radius: 1)
 
@@ -281,14 +281,14 @@ struct PandaView: View {
                 // Big highlight
                 Circle()
                     .fill(Color.white)
-                    .frame(width: 3.2, height: 3.2)
+                    .frame(width: 4.2, height: 4.2)
                     .offset(x: -1.6 + lookX * 0.3, y: -1.6 + lookY * 0.3)
 
                 // Tiny secondary highlight
                 Circle()
-                    .fill(Color.white.opacity(0.85))
-                    .frame(width: 1.6, height: 1.6)
-                    .offset(x: 1.8 + lookX * 0.3, y: 1.4 + lookY * 0.3)
+                    .fill(Color.white.opacity(0.9))
+                    .frame(width: 2.2, height: 2.2)
+                    .offset(x: 2.0 + lookX * 0.3, y: 1.6 + lookY * 0.3)
             }
             .offset(x: baseX + lookX * 0.5, y: -14 + lookY * 0.5)
         }
@@ -554,35 +554,90 @@ struct Cushion: View {
 }
 
 struct PandaBow: View {
+    private let ribbonFill = LinearGradient(
+        colors: [
+            Color(red: 1.0, green: 0.62, blue: 0.78),
+            Color(red: 0.98, green: 0.42, blue: 0.6),
+            Color(red: 0.85, green: 0.22, blue: 0.42)
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+
+    private let ribbonOutline = Color(red: 0.55, green: 0.08, blue: 0.22).opacity(0.85)
+
     var body: some View {
         ZStack {
+            // Ribbon tails dangling below the knot.
+            ribbonTail(side: -1)
+            ribbonTail(side: 1)
+
             // Left loop
-            Ellipse()
-                .fill(LinearGradient(
-                    colors: [Color(red: 1.0, green: 0.55, blue: 0.7), Color(red: 0.95, green: 0.35, blue: 0.55)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ))
-                .frame(width: 10, height: 7)
-                .offset(x: -4)
-                .rotationEffect(.degrees(-15))
+            loop(side: -1)
 
             // Right loop
-            Ellipse()
-                .fill(LinearGradient(
-                    colors: [Color(red: 1.0, green: 0.55, blue: 0.7), Color(red: 0.95, green: 0.35, blue: 0.55)],
-                    startPoint: .topTrailing,
-                    endPoint: .bottomLeading
-                ))
-                .frame(width: 10, height: 7)
-                .offset(x: 4)
-                .rotationEffect(.degrees(15))
+            loop(side: 1)
 
-            // Center knot
-            Circle()
-                .fill(Color(red: 0.95, green: 0.35, blue: 0.55))
-                .frame(width: 4, height: 4)
+            // Center knot — wraps the join so the loops read as a single bow.
+            RoundedRectangle(cornerRadius: 2.5)
+                .fill(ribbonFill)
+                .frame(width: 7, height: 9)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 2.5)
+                        .stroke(ribbonOutline, lineWidth: 1.1)
+                )
+                .overlay(
+                    Capsule()
+                        .fill(Color.white.opacity(0.55))
+                        .frame(width: 1.6, height: 5)
+                        .offset(x: -1.4)
+                )
+                .shadow(color: Color.black.opacity(0.18), radius: 1.5, x: 0, y: 1)
         }
+        .shadow(color: Color.black.opacity(0.22), radius: 2, x: 0, y: 1.5)
+    }
+
+    private func loop(side: CGFloat) -> some View {
+        Ellipse()
+            .fill(ribbonFill)
+            .frame(width: 15, height: 11)
+            .overlay(
+                Ellipse()
+                    .stroke(ribbonOutline, lineWidth: 1.1)
+            )
+            .overlay(
+                Ellipse()
+                    .fill(Color.white.opacity(0.5))
+                    .frame(width: 6, height: 3)
+                    .offset(x: -2 * side, y: -2.5)
+                    .blur(radius: 0.6)
+            )
+            .offset(x: 6 * side)
+            .rotationEffect(.degrees(side == -1 ? -18 : 18))
+    }
+
+    private func ribbonTail(side: CGFloat) -> some View {
+        RibbonTail()
+            .fill(ribbonFill)
+            .frame(width: 6, height: 9)
+            .overlay(
+                RibbonTail()
+                    .stroke(ribbonOutline, lineWidth: 1)
+            )
+            .rotationEffect(.degrees(side == -1 ? -12 : 12))
+            .offset(x: 3 * side, y: 7)
+    }
+}
+
+private struct RibbonTail: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY - rect.height * 0.35))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 
