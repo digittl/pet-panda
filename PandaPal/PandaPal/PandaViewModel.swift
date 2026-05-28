@@ -94,12 +94,15 @@ final class PandaViewModel: ObservableObject {
     @Published var isDragging: Bool = false
     @Published var dragSway: Double = 0
     @Published var size: PandaSize = .medium
+    @Published var sitting: Bool = false
+    @Published var cushionVisible: Bool = false
 
     @Published var particles: [PandaParticleSpawn] = []
 
     // External hooks set by WindowController
     var onWander: ((CGFloat, CGFloat, TimeInterval) -> Void)?
-    var onMoveBy: ((CGFloat, CGFloat) -> Void)?
+    var onCaptureDragOffset: (() -> Void)?
+    var onDragTrackMouse: (() -> Void)?
     var onDragEnded: (() -> Void)?
 
     private var idleTimer: Timer?
@@ -236,17 +239,25 @@ final class PandaViewModel: ObservableObject {
     private func scheduleNextIdle() {
         idleTimer?.invalidate()
         let delay = Double.random(in: 2.5...5.5)
-        idleTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
             self?.playRandomIdle()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        idleTimer = timer
     }
 
     private func scheduleNextWander(initial: Bool = false) {
         wanderTimer?.invalidate()
-        let delay = initial ? Double.random(in: 3...6) : Double.random(in: 6...14)
-        wanderTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+        let delay = initial ? Double.random(in: 1...3) : Double.random(in: 4...9)
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
             self?.wander()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        wanderTimer = timer
+    }
+
+    func forceWander() {
+        wander()
     }
 
     private func cancelTimers() {
@@ -286,6 +297,8 @@ final class PandaViewModel: ObservableObject {
             lookDirection = 0
             lookVertical = 0
             dragSway = 0
+            sitting = false
+            cushionVisible = false
         }
     }
 
@@ -306,7 +319,10 @@ final class PandaViewModel: ObservableObject {
             { self.idlePeekABoo() },
             { self.idleSneeze() },
             { self.idleHumTune() },
-            { self.idleBounce() }
+            { self.idleBounce() },
+            { self.idleSit() },
+            { self.idleNapOnCushion() },
+            { self.idleRelax() }
         ]
         pool.randomElement()?()
     }
@@ -330,9 +346,9 @@ final class PandaViewModel: ObservableObject {
             return
         }
 
-        let dx = CGFloat.random(in: -260 ... 260)
-        let dy = CGFloat.random(in: -120 ... 120)
-        let duration = Double.random(in: 1.6...2.8)
+        let dx = CGFloat.random(in: -400 ... 400)
+        let dy = CGFloat.random(in: -200 ... 200)
+        let duration = Double.random(in: 1.4...2.4)
 
         // Walk-cycle bob & little arm swing
         withAnimation(.easeInOut(duration: 0.2)) {
@@ -687,6 +703,126 @@ final class PandaViewModel: ObservableObject {
             }
         }
         registerTimer(timer)
+    }
+
+    private func idleSit() {
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.7)) {
+            cushionVisible = true
+            sitting = true
+            bodyOffsetY = 14
+            squashScale = 0.94
+            mouthShape = .smile
+        }
+        // Sit a while
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                self.headTilt = -8
+                self.lookVertical = -4
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.5) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                self.headTilt = 6
+                self.lookVertical = 4
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 7.0) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                self.sitting = false
+                self.cushionVisible = false
+                self.bodyOffsetY = 0
+                self.squashScale = 1.0
+                self.headTilt = 0
+                self.lookVertical = 0
+            }
+            self.finishAnimation()
+        }
+    }
+
+    private func idleNapOnCushion() {
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+            cushionVisible = true
+            sitting = true
+            bodyOffsetY = 14
+            squashScale = 0.92
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                self.eyesClosed = true
+                self.mouthShape = .smile
+                self.headTilt = 8
+            }
+        }
+
+        var breaths = 0
+        let timer = Timer.scheduledTimer(withTimeInterval: 1.4, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            withAnimation(.easeInOut(duration: 1.2)) {
+                self.bodyOffsetY = breaths % 2 == 0 ? 16 : 13
+                self.squashScale = breaths % 2 == 0 ? 0.9 : 0.94
+            }
+            self.spawnParticle(.zzz, at: CGSize(width: 26, height: -34))
+            breaths += 1
+            if breaths >= 5 {
+                timer.invalidate()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        self.eyesClosed = false
+                        self.headTilt = 0
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                            self.sitting = false
+                            self.cushionVisible = false
+                            self.bodyOffsetY = 0
+                            self.squashScale = 1.0
+                        }
+                        self.finishAnimation()
+                    }
+                }
+            }
+        }
+        registerTimer(timer)
+    }
+
+    private func idleRelax() {
+        // Lean back on cushion, hands kind of up
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            cushionVisible = true
+            sitting = true
+            bodyOffsetY = 14
+            squashScale = 0.95
+            leftArmRaised = true
+            rightArmRaised = true
+            leftArmWave = -15
+            rightArmWave = 15
+            headTilt = -4
+            mouthShape = .smile
+            blushVisible = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            self.spawnParticle(.heart, at: CGSize(width: 18, height: -28))
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                self.headTilt = 4
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                self.sitting = false
+                self.cushionVisible = false
+                self.bodyOffsetY = 0
+                self.squashScale = 1.0
+                self.leftArmRaised = false
+                self.rightArmRaised = false
+                self.leftArmWave = 0
+                self.rightArmWave = 0
+                self.headTilt = 0
+                self.blushVisible = false
+            }
+            self.finishAnimation()
+        }
     }
 
     // MARK: - Pat reactions (random)

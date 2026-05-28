@@ -26,6 +26,13 @@ struct PandaView: View {
 
     private var pandaBody: some View {
         ZStack {
+            // Cushion (when sitting / napping / relaxing)
+            if viewModel.cushionVisible {
+                Cushion()
+                    .offset(y: 56)
+                    .transition(.scale.combined(with: .opacity))
+            }
+
             // Soft drop shadow under the panda
             Ellipse()
                 .fill(Color.black.opacity(0.18))
@@ -53,9 +60,11 @@ struct PandaView: View {
                 .offset(x: -4, y: 22)
                 .blur(radius: 4)
 
-            // Legs
-            leg(side: -1)
-            leg(side: 1)
+            // Legs (hidden while sitting on the cushion — looks tucked in)
+            if !viewModel.sitting {
+                leg(side: -1)
+                leg(side: 1)
+            }
 
             // Arms
             arm(side: -1, raised: viewModel.leftArmRaised, wave: viewModel.leftArmWave)
@@ -310,6 +319,43 @@ struct GrinPath: Shape {
         path.addLine(to: CGPoint(x: rect.minX, y: rect.midY))
         path.closeSubpath()
         return path
+    }
+}
+
+struct Cushion: View {
+    var body: some View {
+        ZStack {
+            // Cushion body
+            RoundedRectangle(cornerRadius: 14)
+                .fill(LinearGradient(
+                    colors: [
+                        Color(red: 0.95, green: 0.7, blue: 0.85),
+                        Color(red: 0.85, green: 0.45, blue: 0.65)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ))
+                .frame(width: 92, height: 28)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Color(red: 0.65, green: 0.25, blue: 0.45).opacity(0.5), lineWidth: 1.2)
+                )
+
+            // Top highlight stripe
+            Capsule()
+                .fill(Color.white.opacity(0.35))
+                .frame(width: 60, height: 4)
+                .offset(y: -7)
+                .blur(radius: 1.5)
+
+            // Tassels
+            ForEach(0..<2, id: \.self) { i in
+                Circle()
+                    .fill(Color(red: 0.85, green: 0.4, blue: 0.6))
+                    .frame(width: 6, height: 6)
+                    .offset(x: i == 0 ? -46 : 46, y: 2)
+            }
+        }
     }
 }
 

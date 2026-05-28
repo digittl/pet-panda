@@ -28,9 +28,6 @@ struct PandaContainerView: View {
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
-                    // Use NSEvent.mouseLocation (true screen coords). SwiftUI's
-                    // `.global` is window-relative, so it moves with the window
-                    // while we drag — gives wrong deltas.
                     let mouse = NSEvent.mouseLocation
                     if dragStartLocation == nil {
                         dragStartLocation = mouse
@@ -45,13 +42,15 @@ struct PandaContainerView: View {
                         dragStarted = true
                         lastMouseLocation = mouse
                         viewModel.beginDrag()
-                        return
+                        // Snapshot the offset between mouse and window corner
+                        // so we can pin the window to the cursor absolutely.
+                        viewModel.onCaptureDragOffset?()
                     }
+                    // Recompute window origin from current mouse position every
+                    // event — no delta accumulation, no drift.
+                    viewModel.onDragTrackMouse?()
                     if let last = lastMouseLocation {
-                        let dx = mouse.x - last.x
-                        let dy = mouse.y - last.y
-                        viewModel.onMoveBy?(dx, dy)
-                        viewModel.updateDrag(velocityX: dx)
+                        viewModel.updateDrag(velocityX: mouse.x - last.x)
                     }
                     lastMouseLocation = mouse
                 }

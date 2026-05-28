@@ -43,8 +43,12 @@ final class PandaWindowController: NSWindowController {
             self?.wander(dx: dx, dy: dy, duration: duration)
         }
 
-        viewModel.onMoveBy = { [weak self] dx, dy in
-            self?.moveWindowBy(dx: dx, dy: dy)
+        viewModel.onCaptureDragOffset = { [weak self] in
+            self?.captureDragOffset()
+        }
+
+        viewModel.onDragTrackMouse = { [weak self] in
+            self?.dragWindowToMouse()
         }
 
         viewModel.onDragEnded = { [weak self] in
@@ -101,16 +105,28 @@ final class PandaWindowController: NSWindowController {
         UserDefaults.standard.set(positionString, forKey: positionKey)
     }
 
-    private func moveWindowBy(dx: CGFloat, dy: CGFloat) {
+    private var dragOffset: NSPoint = .zero
+
+    private func captureDragOffset() {
+        guard let window = window else { return }
         wanderTimer?.invalidate()
         wanderTimer = nil
+        let mouse = NSEvent.mouseLocation
+        dragOffset = NSPoint(
+            x: window.frame.origin.x - mouse.x,
+            y: window.frame.origin.y - mouse.y
+        )
+    }
 
+    private func dragWindowToMouse() {
         guard let window = window else { return }
-        var origin = window.frame.origin
-        origin.x += dx
-        // NSEvent.mouseLocation is y-up; window origin is also y-up.
-        origin.y += dy
-        window.setFrameOrigin(origin)
+        let mouse = NSEvent.mouseLocation
+        // Window origin is recomputed from absolute mouse position every event,
+        // so no error accumulates even if SwiftUI throttles events.
+        window.setFrameOrigin(NSPoint(
+            x: mouse.x + dragOffset.x,
+            y: mouse.y + dragOffset.y
+        ))
     }
 
     private var wanderTimer: Timer?

@@ -52,6 +52,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Show/Hide Panda", action: #selector(togglePanda), keyEquivalent: "p"))
+        menu.addItem(NSMenuItem(title: "Pat Panda", action: #selector(patPanda), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Walk Now", action: #selector(walkNow), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Reset Position", action: #selector(resetPosition), keyEquivalent: "r"))
 
         let sizeItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
@@ -118,6 +120,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func resetPosition() {
         pandaWindowController?.resetPosition()
+    }
+
+    @objc private func patPanda() {
+        pandaWindowController?.viewModel.pat()
+    }
+
+    @objc private func walkNow() {
+        pandaWindowController?.viewModel.forceWander()
     }
 
     @objc private func quitApp() {
