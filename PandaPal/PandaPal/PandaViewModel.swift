@@ -91,6 +91,11 @@ final class PandaViewModel: ObservableObject {
     @Published var shadowScale: CGFloat = 1.0
     @Published var bambooVisible: Bool = false
     @Published var bambooTilt: Double = 0
+    @Published var bambooScale: CGFloat = 1.0
+    @Published var walkStride: CGFloat = 0
+    @Published var walkFootLift: CGFloat = 0
+    @Published var leadingPawSide: CGFloat = -1
+    @Published var walkDirection: CGFloat = 1
     @Published var isDragging: Bool = false
     @Published var dragSway: Double = 0
     @Published var size: PandaSize = .medium
@@ -105,6 +110,7 @@ final class PandaViewModel: ObservableObject {
     var onCaptureDragOffset: (() -> Void)?
     var onDragTrackMouse: (() -> Void)?
     var onDragEnded: (() -> Void)?
+    var onSizeSelected: ((PandaSize) -> Void)?
 
     private var idleTimer: Timer?
     private var wanderTimer: Timer?
@@ -143,6 +149,7 @@ final class PandaViewModel: ObservableObject {
         }
         isBusy = true
         cancelTimers()
+        resetTransientState()
 
         let reactions: [() -> Void] = [
             { self.reactHappy() },
@@ -167,6 +174,22 @@ final class PandaViewModel: ObservableObject {
             { self.reactNuzzle() }
         ]
         reactions.randomElement()?()
+    }
+
+    func pet() {
+        pat()
+    }
+
+    func feedBamboo() {
+        guard !isDragging else { return }
+        cancelTimers()
+        resetTransientState()
+        isBusy = true
+        playBambooFeast(celebratory: true)
+    }
+
+    func requestSize(_ size: PandaSize) {
+        onSizeSelected?(size)
     }
 
     // MARK: - Drag interaction
@@ -249,7 +272,7 @@ final class PandaViewModel: ObservableObject {
 
     private func scheduleNextWander(initial: Bool = false) {
         wanderTimer?.invalidate()
-        let delay = initial ? Double.random(in: 4...8) : Double.random(in: 25...55)
+        let delay = initial ? Double.random(in: 2.5...5) : Double.random(in: 12...24)
         let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
             self?.wander()
         }
@@ -294,6 +317,11 @@ final class PandaViewModel: ObservableObject {
             shadowScale = 1.0
             earWiggle = 0
             bambooVisible = false
+            bambooScale = 1.0
+            walkStride = 0
+            walkFootLift = 0
+            leadingPawSide = -1
+            walkDirection = 1
             blushVisible = false
             lookDirection = 0
             lookVertical = 0
@@ -348,25 +376,36 @@ final class PandaViewModel: ObservableObject {
             return
         }
 
-        let dx = CGFloat.random(in: -400 ... 400)
-        let dy = CGFloat.random(in: -200 ... 200)
-        let duration = Double.random(in: 1.4...2.4)
+        let dx = CGFloat.random(in: -360 ... 360)
+        let dy = CGFloat.random(in: -180 ... 180)
+        let duration = Double.random(in: 1.8...2.8)
+        let direction: CGFloat = dx >= 0 ? 1 : -1
+        walkDirection = direction
 
-        // Walk-cycle bob & little arm swing
-        withAnimation(.easeInOut(duration: 0.2)) {
-            headTilt = dx > 0 ? 5 : -5
-            lookDirection = dx > 0 ? 6 : -6
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.7)) {
+            headTilt = Double(direction * 4)
+            lookDirection = direction * 7
+            squashScale = 0.96
+            shadowScale = 1.08
+            bodyOffsetY = 2
         }
 
         var step = 0
-        let totalSteps = Int(duration / 0.18)
-        let bobTimer = Timer.scheduledTimer(withTimeInterval: 0.18, repeats: true) { [weak self] timer in
+        let stepInterval = 0.14
+        let totalSteps = max(10, Int(duration / stepInterval))
+        let bobTimer = Timer.scheduledTimer(withTimeInterval: stepInterval, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             step += 1
-            withAnimation(.easeInOut(duration: 0.18)) {
-                self.bodyOffsetY = step % 2 == 0 ? -3 : 0
-                self.leftArmWave = step % 2 == 0 ? 12 : -12
-                self.rightArmWave = step % 2 == 0 ? -12 : 12
+            let isEvenStep = step % 2 == 0
+            withAnimation(.spring(response: 0.16, dampingFraction: 0.78)) {
+                self.leadingPawSide = isEvenStep ? -1 : 1
+                self.walkFootLift = isEvenStep ? 5 : 4
+                self.walkStride = isEvenStep ? 4 : -4
+                self.bodyOffsetY = isEvenStep ? -4 : -1
+                self.squashScale = isEvenStep ? 1.015 : 0.985
+                self.shadowScale = isEvenStep ? 0.86 : 1.02
+                self.leftArmWave = isEvenStep ? 16 : -14
+                self.rightArmWave = isEvenStep ? -16 : 14
                 self.leftArmRaised = false
                 self.rightArmRaised = false
             }
@@ -376,15 +415,21 @@ final class PandaViewModel: ObservableObject {
         }
         registerTimer(bobTimer)
 
-        onWander(dx, dy, duration)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
+            onWander(dx, dy, duration)
+        }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.1) {
-            withAnimation(.easeInOut(duration: 0.3)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.32) {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.72)) {
                 self.bodyOffsetY = 0
                 self.leftArmWave = 0
                 self.rightArmWave = 0
                 self.headTilt = 0
                 self.lookDirection = 0
+                self.walkStride = 0
+                self.walkFootLift = 0
+                self.squashScale = 1.0
+                self.shadowScale = 1.0
             }
             self.finishAnimation()
         }
@@ -550,36 +595,69 @@ final class PandaViewModel: ObservableObject {
     }
 
     private func idleEatBamboo() {
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+        playBambooFeast(celebratory: false)
+    }
+
+    private func playBambooFeast(celebratory: Bool) {
+        withAnimation(.spring(response: 0.36, dampingFraction: 0.68)) {
             bambooVisible = true
             bambooTilt = -20
+            bambooScale = 0.96
             leftArmRaised = true
             rightArmRaised = true
             mouthShape = .grin
+            blushVisible = celebratory
+            lookDirection = -2
+            bodyOffsetY = -2
         }
 
         var chomps = 0
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: true) { [weak self] timer in
+        let maxChomps = celebratory ? 8 : 6
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.26, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             chomps += 1
-            withAnimation(.easeInOut(duration: 0.18)) {
+            let biteIn = chomps % 2 != 0
+            withAnimation(.spring(response: 0.18, dampingFraction: 0.62)) {
                 self.mouthShape = chomps % 2 == 0 ? .grin : .ohh
-                self.bambooTilt = chomps % 2 == 0 ? -20 : -28
-                self.headTilt = chomps % 2 == 0 ? -2 : 2
+                self.bambooTilt = biteIn ? -30 : -16
+                self.bambooScale = biteIn ? 0.92 : 1.04
+                self.headTilt = biteIn ? 3 : -2
+                self.bodyOffsetY = biteIn ? 1 : -3
+                self.squashScale = biteIn ? 0.98 : 1.03
+                self.lookDirection = biteIn ? -4 : 2
             }
             if chomps % 2 == 0 {
                 self.spawnParticle(.bambooLeaf, at: CGSize(width: 8, height: -8))
             }
-            if chomps >= 6 {
+            if celebratory && chomps == maxChomps - 1 {
+                self.spawnParticle(.sparkle, at: CGSize(width: -18, height: -28))
+                self.spawnParticle(.sparkle, at: CGSize(width: 18, height: -32))
+            }
+            if chomps >= maxChomps {
                 timer.invalidate()
-                withAnimation(.easeInOut(duration: 0.4)) {
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.76)) {
                     self.bambooVisible = false
+                    self.bambooScale = 1.0
                     self.leftArmRaised = false
                     self.rightArmRaised = false
-                    self.mouthShape = .smile
+                    self.mouthShape = celebratory ? .grin : .smile
                     self.headTilt = 0
+                    self.bodyOffsetY = 0
+                    self.squashScale = 1.0
+                    self.lookDirection = 0
+                    self.blushVisible = false
                 }
-                self.finishAnimation()
+                if celebratory {
+                    self.spawnParticle(.heart, at: CGSize(width: 0, height: -38))
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            self.mouthShape = .smile
+                        }
+                        self.finishAnimation()
+                    }
+                } else {
+                    self.finishAnimation()
+                }
             }
         }
         registerTimer(timer)

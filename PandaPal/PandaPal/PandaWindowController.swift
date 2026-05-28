@@ -55,6 +55,10 @@ final class PandaWindowController: NSWindowController {
             self?.savePosition()
         }
 
+        viewModel.onSizeSelected = { [weak self] size in
+            self?.setSize(size)
+        }
+
         restorePosition()
 
         NotificationCenter.default.addObserver(
@@ -152,9 +156,13 @@ final class PandaWindowController: NSWindowController {
                 return
             }
             let t = min(1.0, Date().timeIntervalSince(startTime) / duration)
-            let eased: Double = t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2
+            let eased = t * t * t * (t * (t * 6 - 15) + 10)
+            let deltaX = Double(target.x - start.x)
+            let deltaY = Double(target.y - start.y)
+            let travel = hypot(deltaX, deltaY)
+            let lift = sin(t * .pi) * min(10, max(3, travel * 0.018))
             let x = start.x + (target.x - start.x) * CGFloat(eased)
-            let y = start.y + (target.y - start.y) * CGFloat(eased)
+            let y = start.y + (target.y - start.y) * CGFloat(eased) + CGFloat(lift)
             window.setFrameOrigin(NSPoint(x: x, y: y))
             if t >= 1.0 {
                 timer.invalidate()
