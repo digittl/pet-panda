@@ -2,6 +2,34 @@ import SwiftUI
 import Combine
 import AppKit
 
+enum PandaSize: String, CaseIterable {
+    case tiny = "tiny"
+    case small = "small"
+    case medium = "medium"
+    case large = "large"
+    case huge = "huge"
+
+    var multiplier: CGFloat {
+        switch self {
+        case .tiny: return 0.55
+        case .small: return 0.7
+        case .medium: return 0.85
+        case .large: return 1.0
+        case .huge: return 1.25
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .tiny: return "Tiny"
+        case .small: return "Small"
+        case .medium: return "Medium"
+        case .large: return "Large"
+        case .huge: return "Huge"
+        }
+    }
+}
+
 enum MouthShape {
     case smile
     case open
@@ -65,6 +93,7 @@ final class PandaViewModel: ObservableObject {
     @Published var bambooTilt: Double = 0
     @Published var isDragging: Bool = false
     @Published var dragSway: Double = 0
+    @Published var size: PandaSize = .medium
 
     @Published var particles: [PandaParticleSpawn] = []
 
@@ -127,7 +156,11 @@ final class PandaViewModel: ObservableObject {
             { self.reactWiggleButt() },
             { self.reactShy() },
             { self.reactClap() },
-            { self.reactFlex() }
+            { self.reactFlex() },
+            { self.reactThinking() },
+            { self.reactStargaze() },
+            { self.reactPhotoshoot() },
+            { self.reactNuzzle() }
         ]
         reactions.randomElement()?()
     }
@@ -1110,6 +1143,141 @@ final class PandaViewModel: ObservableObject {
             }
             self.finishAnimation()
         }
+    }
+
+    private func reactThinking() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            rightArmRaised = true
+            rightArmWave = -20
+            headTilt = -8
+            lookVertical = -6
+            mouthShape = .ohh
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            self.spawnParticle(.sparkle, at: CGSize(width: -22, height: -34))
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                self.lookVertical = 4
+                self.headTilt = 6
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                self.rightArmRaised = false
+                self.rightArmWave = 0
+                self.headTilt = 0
+                self.lookVertical = 0
+                self.mouthShape = .grin
+            }
+            self.spawnParticle(.star, at: CGSize(width: 0, height: -36))
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                withAnimation { self.mouthShape = .smile }
+                self.finishAnimation()
+            }
+        }
+    }
+
+    private func reactStargaze() {
+        withAnimation(.easeInOut(duration: 0.5)) {
+            lookVertical = -10
+            headTilt = -8
+            mouthShape = .ohh
+            eyesStarry = true
+        }
+        for i in 0..<5 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.25) {
+                self.spawnParticle(.star, at: CGSize(width: CGFloat.random(in: -30...30), height: -50 + CGFloat.random(in: -10...10)))
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                self.lookVertical = 0
+                self.headTilt = 0
+                self.eyesStarry = false
+                self.mouthShape = .smile
+            }
+            self.finishAnimation()
+        }
+    }
+
+    private func reactPhotoshoot() {
+        // Pose 1
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.55)) {
+            leftArmRaised = true
+            leftArmWave = 20
+            headTilt = -8
+            mouthShape = .grin
+            eyesClosed = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            self.spawnParticle(.sparkle, at: CGSize(width: -30, height: -30))
+        }
+        // Pose 2
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.55)) {
+                self.leftArmRaised = false
+                self.rightArmRaised = true
+                self.rightArmWave = -20
+                self.headTilt = 8
+                self.eyesClosed = false
+                self.eyesWide = true
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.95) {
+            self.spawnParticle(.sparkle, at: CGSize(width: 30, height: -30))
+        }
+        // Pose 3 — finger guns / point
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.55)) {
+                self.leftArmRaised = true
+                self.rightArmRaised = true
+                self.leftArmWave = -10
+                self.rightArmWave = 10
+                self.headTilt = -4
+                self.eyesWide = false
+                self.mouthShape = .ohh
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                self.leftArmRaised = false
+                self.rightArmRaised = false
+                self.leftArmWave = 0
+                self.rightArmWave = 0
+                self.headTilt = 0
+                self.mouthShape = .smile
+            }
+            self.finishAnimation()
+        }
+    }
+
+    private func reactNuzzle() {
+        var i = 0
+        withAnimation { mouthShape = .grin; blushVisible = true; eyesClosed = true }
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.22, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                self.headTilt = i % 2 == 0 ? -12 : 12
+                self.bodyOffsetY = i % 2 == 0 ? -2 : 0
+            }
+            if i % 2 == 0 {
+                self.spawnParticle(.heart, at: CGSize(width: CGFloat.random(in: -10...10), height: -30))
+            }
+            i += 1
+            if i >= 6 {
+                timer.invalidate()
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    self.headTilt = 0
+                    self.bodyOffsetY = 0
+                    self.eyesClosed = false
+                    self.blushVisible = false
+                    self.mouthShape = .smile
+                }
+                self.finishAnimation()
+            }
+        }
+        registerTimer(timer)
     }
 
     private func quickSquish() {

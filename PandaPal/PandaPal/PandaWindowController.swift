@@ -2,13 +2,21 @@ import AppKit
 import SwiftUI
 
 final class PandaWindowController: NSWindowController {
-    private let pandaSize = NSSize(width: 140, height: 160)
+    private let baseSize = NSSize(width: 140, height: 160)
     private let positionKey = "PandaPal.lastPosition"
-    private let viewModel = PandaViewModel()
+    private let sizeKey = "PandaPal.size"
+    let viewModel = PandaViewModel()
+
+    private var pandaSize: NSSize {
+        let m = viewModel.size.multiplier
+        return NSSize(width: baseSize.width * m, height: baseSize.height * m)
+    }
 
     convenience init() {
+        let storedSize = UserDefaults.standard.string(forKey: "PandaPal.size").flatMap(PandaSize.init(rawValue:)) ?? .medium
+        let m = storedSize.multiplier
         let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: NSSize(width: 140, height: 160)),
+            contentRect: NSRect(origin: .zero, size: NSSize(width: 140 * m, height: 160 * m)),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -24,6 +32,7 @@ final class PandaWindowController: NSWindowController {
         panel.becomesKeyOnlyIfNeeded = true
 
         self.init(window: panel)
+        viewModel.size = storedSize
 
         let hostingView = NSHostingView(rootView: PandaContainerView(viewModel: viewModel))
         hostingView.frame = panel.contentView!.bounds
@@ -50,6 +59,18 @@ final class PandaWindowController: NSWindowController {
             name: NSWindow.didMoveNotification,
             object: panel
         )
+    }
+
+    func setSize(_ size: PandaSize) {
+        viewModel.size = size
+        UserDefaults.standard.set(size.rawValue, forKey: sizeKey)
+
+        guard let window = window else { return }
+        let center = NSPoint(x: window.frame.midX, y: window.frame.midY)
+        let new = pandaSize
+        let origin = NSPoint(x: center.x - new.width / 2, y: center.y - new.height / 2)
+        window.setFrame(NSRect(origin: origin, size: new), display: true, animate: false)
+        savePosition()
     }
 
     func resetPosition() {
@@ -81,34 +102,52 @@ final class PandaWindowController: NSWindowController {
     }
 
     private func moveWindowBy(dx: CGFloat, dy: CGFloat) {
+        wanderTimer?.invalidate()
+        wanderTimer = nil
+
         guard let window = window else { return }
         var origin = window.frame.origin
         origin.x += dx
-        // SwiftUI gesture deltaY is positive going down; window y is positive going up.
-        origin.y -= dy
+        // NSEvent.mouseLocation is y-up; window origin is also y-up.
+        origin.y += dy
         window.setFrameOrigin(origin)
     }
 
+    private var wanderTimer: Timer?
+
     private func wander(dx: CGFloat, dy: CGFloat, duration: TimeInterval) {
         guard let window = window, let screen = window.screen ?? NSScreen.main else { return }
-        let frame = window.frame
+        let start = window.frame.origin
         let visible = screen.visibleFrame
 
-        var targetX = frame.origin.x + dx
-        var targetY = frame.origin.y + dy
-
+        var targetX = start.x + dx
+        var targetY = start.y + dy
         targetX = min(max(targetX, visible.minX + 10), visible.maxX - pandaSize.width - 10)
         targetY = min(max(targetY, visible.minY + 10), visible.maxY - pandaSize.height - 10)
-
         let target = NSPoint(x: targetX, y: targetY)
 
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = duration
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            window.animator().setFrameOrigin(target)
-        }, completionHandler: { [weak self] in
-            self?.savePosition()
-        })
+        // NSWindow.animator() doesn't reliably animate borderless panels —
+        // drive the interpolation ourselves at 60fps.
+        wanderTimer?.invalidate()
+        let startTime = Date()
+        wanderTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self, weak window] timer in
+            guard let window = window else {
+                timer.invalidate()
+                return
+            }
+            let t = min(1.0, Date().timeIntervalSince(startTime) / duration)
+            let eased: Double = t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2
+            let x = start.x + (target.x - start.x) * CGFloat(eased)
+            let y = start.y + (target.y - start.y) * CGFloat(eased)
+            window.setFrameOrigin(NSPoint(x: x, y: y))
+            if t >= 1.0 {
+                timer.invalidate()
+                self?.savePosition()
+            }
+        }
+        if let wanderTimer = wanderTimer {
+            RunLoop.main.add(wanderTimer, forMode: .common)
+        }
     }
 
     @objc private func windowDidMove(_ notification: Notification) {

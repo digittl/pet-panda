@@ -1,56 +1,69 @@
 import SwiftUI
+import AppKit
 
 struct PandaContainerView: View {
     @ObservedObject var viewModel: PandaViewModel
-    @State private var lastDragLocation: CGPoint?
     @State private var dragStarted = false
+    @State private var dragStartLocation: CGPoint?
+    @State private var lastMouseLocation: CGPoint?
 
     var body: some View {
         ZStack {
             Color.clear.contentShape(Rectangle())
 
-            PandaView(viewModel: viewModel)
-                .scaleEffect(viewModel.bounceScale)
-                .offset(y: viewModel.bodyOffsetY)
+            ZStack {
+                PandaView(viewModel: viewModel)
+                    .scaleEffect(viewModel.bounceScale)
+                    .offset(y: viewModel.bodyOffsetY)
 
-            ForEach(viewModel.particles) { spawn in
-                ParticleView(spawn: spawn)
+                ForEach(viewModel.particles) { spawn in
+                    ParticleView(spawn: spawn)
+                }
             }
+            .frame(width: 140, height: 160)
+            .scaleEffect(viewModel.size.multiplier)
         }
-        .frame(width: 140, height: 160)
+        .frame(width: 140 * viewModel.size.multiplier, height: 160 * viewModel.size.multiplier)
         .contentShape(Rectangle())
         .gesture(
-            DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                .onChanged { value in
-                    let translation = value.translation
-                    let distance = sqrt(translation.width * translation.width + translation.height * translation.height)
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    // Use NSEvent.mouseLocation (true screen coords). SwiftUI's
+                    // `.global` is window-relative, so it moves with the window
+                    // while we drag — gives wrong deltas.
+                    let mouse = NSEvent.mouseLocation
+                    if dragStartLocation == nil {
+                        dragStartLocation = mouse
+                    }
                     if !dragStarted {
-                        // Only treat as drag once movement exceeds a tap threshold.
-                        if distance < 4 {
-                            return
+                        if let start = dragStartLocation {
+                            let dist = hypot(mouse.x - start.x, mouse.y - start.y)
+                            if dist < 4 {
+                                return
+                            }
                         }
                         dragStarted = true
+                        lastMouseLocation = mouse
                         viewModel.beginDrag()
+                        return
                     }
-                    let current = value.location
-                    if let last = lastDragLocation {
-                        let dx = current.x - last.x
-                        let dy = current.y - last.y
+                    if let last = lastMouseLocation {
+                        let dx = mouse.x - last.x
+                        let dy = mouse.y - last.y
                         viewModel.onMoveBy?(dx, dy)
                         viewModel.updateDrag(velocityX: dx)
                     }
-                    lastDragLocation = current
+                    lastMouseLocation = mouse
                 }
-                .onEnded { value in
-                    let translation = value.translation
-                    let distance = sqrt(translation.width * translation.width + translation.height * translation.height)
+                .onEnded { _ in
                     if dragStarted {
                         dragStarted = false
-                        lastDragLocation = nil
                         viewModel.endDrag()
-                    } else if distance < 4 {
+                    } else {
                         viewModel.pat()
                     }
+                    lastMouseLocation = nil
+                    dragStartLocation = nil
                 }
         )
     }

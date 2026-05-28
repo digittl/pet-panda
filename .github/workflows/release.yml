@@ -28,13 +28,69 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Package app
+      - name: Generate INSTALL.txt
+        working-directory: PandaPal
+        run: |
+          cat > INSTALL.txt <<'EOF'
+          PandaPal — Installation
+          =======================
+
+          1. Drag PandaPal.app into your Applications folder.
+          2. The first time you open it, macOS will say it can't be opened because
+             it isn't notarized (this app is built without a paid Apple Developer
+             account). You have two options:
+
+             a) RECOMMENDED: Right-click PandaPal.app → Open → click "Open" in
+                the dialog. macOS remembers your choice — after that you can
+                launch it normally forever.
+
+             b) ALTERNATIVE: open Terminal and run:
+
+                xattr -dr com.apple.quarantine /Applications/PandaPal.app
+
+                then double-click PandaPal.app as usual.
+
+          3. A paw print icon will appear in your menu bar with controls
+             (Show/Hide, Reset Position, Size, Quit). The panda lives on
+             your screen — click to pat, drag to move, and he wanders on
+             his own every few seconds.
+
+          Enjoy your panda!
+          EOF
+
+      - name: Package zip
         working-directory: PandaPal
         run: |
           APP_PATH="build/Build/Products/Release/PandaPal.app"
-          ditto -c -k --keepParent "$APP_PATH" PandaPal.zip
+          mkdir -p zip-staging
+          cp -R "$APP_PATH" zip-staging/
+          cp INSTALL.txt zip-staging/
+          ditto -c -k --keepParent zip-staging PandaPal.zip
+          # The above gives a wrapping folder — repack cleanly so the zip
+          # extracts PandaPal.app + INSTALL.txt directly.
+          rm PandaPal.zip
+          (cd zip-staging && ditto -c -k --sequesterRsrc --keepParent PandaPal.app ../PandaPal.zip)
+          (cd zip-staging && zip -j ../PandaPal.zip INSTALL.txt)
 
-      - name: Upload release asset
+      - name: Build DMG
+        working-directory: PandaPal
+        run: |
+          APP_PATH="build/Build/Products/Release/PandaPal.app"
+          mkdir -p dmg-staging
+          cp -R "$APP_PATH" dmg-staging/
+          cp INSTALL.txt dmg-staging/
+          ln -s /Applications dmg-staging/Applications
+          hdiutil create \
+            -volname "PandaPal" \
+            -srcfolder dmg-staging \
+            -ov \
+            -format UDZO \
+            PandaPal.dmg
+
+      - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
-          files: PandaPal/PandaPal.zip
+          files: |
+            PandaPal/PandaPal.zip
+            PandaPal/PandaPal.dmg
+            PandaPal/INSTALL.txt

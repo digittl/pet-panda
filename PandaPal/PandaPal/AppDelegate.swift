@@ -53,14 +53,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Show/Hide Panda", action: #selector(togglePanda), keyEquivalent: "p"))
         menu.addItem(NSMenuItem(title: "Reset Position", action: #selector(resetPosition), keyEquivalent: "r"))
+
+        let sizeItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
+        let sizeMenu = NSMenu()
+        for size in PandaSize.allCases {
+            let item = NSMenuItem(title: size.label, action: #selector(setSize(_:)), keyEquivalent: "")
+            item.representedObject = size.rawValue
+            sizeMenu.addItem(item)
+        }
+        sizeItem.submenu = sizeMenu
+        menu.addItem(sizeItem)
+
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q"))
 
         for item in menu.items {
             item.target = self
         }
+        for item in sizeMenu.items {
+            item.target = self
+        }
 
         statusItem.menu = menu
+        updateSizeMenuState(sizeMenu)
+    }
+
+    private func updateSizeMenuState(_ sizeMenu: NSMenu) {
+        let current = pandaWindowController?.viewModel.size.rawValue
+            ?? UserDefaults.standard.string(forKey: "PandaPal.size")
+            ?? PandaSize.medium.rawValue
+        for item in sizeMenu.items {
+            if let raw = item.representedObject as? String {
+                item.state = raw == current ? .on : .off
+            }
+        }
+    }
+
+    @objc private func setSize(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let size = PandaSize(rawValue: raw) else { return }
+        pandaWindowController?.setSize(size)
+        if let sizeMenu = sender.menu {
+            updateSizeMenuState(sizeMenu)
+        }
     }
 
     private func showPanda() {

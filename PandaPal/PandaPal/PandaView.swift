@@ -81,6 +81,11 @@ struct PandaView: View {
             ear(side: -1)
             ear(side: 1)
 
+            // Cute pink bow on top of head (always-on accessory)
+            PandaBow()
+                .offset(x: 16, y: -44)
+                .rotationEffect(.degrees(-12))
+
             // Head shape
             Circle()
                 .fill(bodyFill)
@@ -253,15 +258,20 @@ struct PandaView: View {
     }
 
     private func arm(side: CGFloat, raised: Bool, wave: Double) -> some View {
-        let angleDown: Double = side == -1 ? 15 : -15
-        let angleUp: Double = side == -1 ? -55 : 55
-        let angle = raised ? angleUp + wave : angleDown
+        // Keep arm rotation modest so it never tucks behind the body or
+        // disappears off the side. `raised` adds a fixed upward swing, then
+        // `wave` adds a small extra swing within sensible bounds.
+        let baseDown: Double = side == -1 ? 18 : -18
+        let baseUp: Double = side == -1 ? -22 : 22
+        let base = raised ? baseUp : baseDown
+        let clampedWave = max(-25, min(25, wave))
+        let angle = base + clampedWave
 
         return Ellipse()
             .fill(darkFill)
             .frame(width: 18, height: 30)
-            .rotationEffect(.degrees(angle), anchor: .top)
-            .offset(x: 32 * side, y: raised ? 2 : 18)
+            .rotationEffect(.degrees(angle), anchor: UnitPoint(x: 0.5, y: 0.15))
+            .offset(x: 30 * side, y: raised ? 6 : 16)
     }
 }
 
@@ -300,6 +310,39 @@ struct GrinPath: Shape {
         path.addLine(to: CGPoint(x: rect.minX, y: rect.midY))
         path.closeSubpath()
         return path
+    }
+}
+
+struct PandaBow: View {
+    var body: some View {
+        ZStack {
+            // Left loop
+            Ellipse()
+                .fill(LinearGradient(
+                    colors: [Color(red: 1.0, green: 0.55, blue: 0.7), Color(red: 0.95, green: 0.35, blue: 0.55)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ))
+                .frame(width: 10, height: 7)
+                .offset(x: -4)
+                .rotationEffect(.degrees(-15))
+
+            // Right loop
+            Ellipse()
+                .fill(LinearGradient(
+                    colors: [Color(red: 1.0, green: 0.55, blue: 0.7), Color(red: 0.95, green: 0.35, blue: 0.55)],
+                    startPoint: .topTrailing,
+                    endPoint: .bottomLeading
+                ))
+                .frame(width: 10, height: 7)
+                .offset(x: 4)
+                .rotationEffect(.degrees(15))
+
+            // Center knot
+            Circle()
+                .fill(Color(red: 0.95, green: 0.35, blue: 0.55))
+                .frame(width: 4, height: 4)
+        }
     }
 }
 
