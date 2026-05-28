@@ -99,7 +99,9 @@ Pre-built releases are available on the [Releases page](../../releases). Each re
 1. Go to the **Releases** page on GitHub
 2. Download `PandaPal.zip` from the latest release
 3. Unzip and drag `PandaPal.app` to your Applications folder (or run it from anywhere)
-4. On first launch, right-click → Open to bypass Gatekeeper (unsigned app)
+4. **First launch: right-click `PandaPal.app` → Open**, then click **Open** in the dialog
+
+> The app is not notarized (no paid Apple Developer account), so Gatekeeper will block a normal double-click on a freshly downloaded copy. Right-click → Open tells macOS you trust it — after that one-time confirmation it launches normally forever. No Terminal / `xattr` commands required.
 
 Build artifacts are also available from any CI run on the **Actions** tab.
 

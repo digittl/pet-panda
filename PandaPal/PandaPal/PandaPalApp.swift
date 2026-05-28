@@ -8,5 +8,8 @@ struct PandaPalApp: App {
         Settings {
             EmptyView()
         }
+        .commands {
+            CommandGroup(replacing: .appSettings) {}
+        }
     }
 }

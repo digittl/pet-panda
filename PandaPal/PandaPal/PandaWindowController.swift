@@ -2,12 +2,13 @@ import AppKit
 import SwiftUI
 
 final class PandaWindowController: NSWindowController {
-    private let pandaSize = NSSize(width: 120, height: 140)
+    private let pandaSize = NSSize(width: 140, height: 160)
     private let positionKey = "PandaPal.lastPosition"
+    private let viewModel = PandaViewModel()
 
     convenience init() {
         let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: NSSize(width: 120, height: 140)),
+            contentRect: NSRect(origin: .zero, size: NSSize(width: 140, height: 160)),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -22,14 +23,16 @@ final class PandaWindowController: NSWindowController {
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
 
-        let pandaViewModel = PandaViewModel()
-        let hostingView = NSHostingView(rootView: PandaContainerView(viewModel: pandaViewModel))
+        self.init(window: panel)
+
+        let hostingView = NSHostingView(rootView: PandaContainerView(viewModel: viewModel))
         hostingView.frame = panel.contentView!.bounds
         hostingView.autoresizingMask = [.width, .height]
-
         panel.contentView = hostingView
 
-        self.init(window: panel)
+        viewModel.onWander = { [weak self] dx, dy, duration in
+            self?.wander(dx: dx, dy: dy, duration: duration)
+        }
 
         restorePosition()
 
@@ -67,6 +70,28 @@ final class PandaWindowController: NSWindowController {
         guard let origin = window?.frame.origin else { return }
         let positionString = "\(origin.x),\(origin.y)"
         UserDefaults.standard.set(positionString, forKey: positionKey)
+    }
+
+    private func wander(dx: CGFloat, dy: CGFloat, duration: TimeInterval) {
+        guard let window = window, let screen = window.screen ?? NSScreen.main else { return }
+        let frame = window.frame
+        let visible = screen.visibleFrame
+
+        var targetX = frame.origin.x + dx
+        var targetY = frame.origin.y + dy
+
+        targetX = min(max(targetX, visible.minX + 10), visible.maxX - pandaSize.width - 10)
+        targetY = min(max(targetY, visible.minY + 10), visible.maxY - pandaSize.height - 10)
+
+        let target = NSPoint(x: targetX, y: targetY)
+
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = duration
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            window.animator().setFrameOrigin(target)
+        }, completionHandler: { [weak self] in
+            self?.savePosition()
+        })
     }
 
     @objc private func windowDidMove(_ notification: Notification) {
