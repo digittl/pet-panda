@@ -1,0 +1,40 @@
+name: Build and Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: Build PandaPal.app
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+      - name: Build
+        working-directory: PandaPal
+        run: |
+          xcodebuild \
+            -project PandaPal.xcodeproj \
+            -scheme PandaPal \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package app
+        working-directory: PandaPal
+        run: |
+          APP_PATH="build/Build/Products/Release/PandaPal.app"
+          ditto -c -k --keepParent "$APP_PATH" PandaPal.zip
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: PandaPal/PandaPal.zip

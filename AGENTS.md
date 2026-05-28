@@ -2,19 +2,25 @@
 
 ## Cursor Cloud specific instructions
 
-This repository (`pet-panda`) is currently an empty/scaffolding repository with no application code, dependencies, or services. It contains only a `README.md`.
+This repository contains **Panda Pal**, a native macOS SwiftUI menu bar app. It requires macOS and Xcode to build — it cannot be compiled on Linux.
 
-### Current state
+### Project structure
 
-- **No application code** exists yet — no source files, no package manifests, no build configuration.
-- **No dependencies** to install — no `package.json`, `requirements.txt`, `go.mod`, etc.
-- **No services** to run — no dev server, database, or external service dependencies.
-- **No tests or linting** configured.
+- `PandaPal/` — the Xcode project directory
+  - `PandaPal.xcodeproj` — Xcode project file (shared scheme included)
+  - `PandaPal/` — Swift source files (AppDelegate, views, view model, window controller)
+  - `Package.swift` — alternative SPM build support
 
-### For future agents
+### Building
 
-When application code is added to this repo, update this section with:
-- How to install dependencies (package manager + command)
-- How to run the dev server / application
-- How to run tests and lint
-- Any non-obvious environment setup or gotchas
+- **Primary**: Open `PandaPal/PandaPal.xcodeproj` in Xcode, press ⌘R
+- **CLI**: `cd PandaPal && xcodebuild -project PandaPal.xcodeproj -scheme PandaPal build`
+- **SPM**: `cd PandaPal && swift build` (limited — no .app bundle)
+
+### Key caveats
+
+- This is a macOS-only project. The cloud VM (Linux) cannot compile or run it.
+- No external dependencies — pure Apple frameworks (SwiftUI, AppKit, Combine).
+- No tests are configured yet — the project is purely visual/interactive.
+- The `LSUIElement=true` plist key hides the app from the Dock; the app only appears in the menu bar.
+- The floating panda uses `NSPanel` with `.nonactivatingPanel` to avoid stealing focus from other apps.
