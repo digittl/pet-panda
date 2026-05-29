@@ -29,6 +29,34 @@ struct PandaView: View {
         endPoint: .bottom
     )
 
+    private var isBoy: Bool { viewModel.gender == .boy }
+
+    // Boy pandas use a cool-blue accent instead of pink for ear interior,
+    // paw pads, and cheeks; the cushion + neck accessory also switch to blue.
+    private var earInnerColors: [Color] {
+        if isBoy {
+            return [Color(red: 0.55, green: 0.7, blue: 0.85).opacity(0.45), Color(red: 0.4, green: 0.55, blue: 0.75).opacity(0.15)]
+        }
+        return [Color.pink.opacity(0.5), Color.pink.opacity(0.18)]
+    }
+
+    private var pawPadColor: Color {
+        isBoy ? Color(red: 0.45, green: 0.6, blue: 0.78).opacity(0.55) : Color.pink.opacity(0.55)
+    }
+
+    private var smallPawPadColor: Color {
+        isBoy ? Color(red: 0.45, green: 0.6, blue: 0.78).opacity(0.5) : Color.pink.opacity(0.5)
+    }
+
+    private var cheekColor: Color {
+        // Boy still gets a faint blush so the face doesn't read flat, but it's
+        // a cool peach rather than candy-pink.
+        if isBoy {
+            return Color(red: 0.78, green: 0.55, blue: 0.55).opacity(viewModel.blushVisible ? 0.45 : 0.18)
+        }
+        return Color.pink.opacity(viewModel.blushVisible ? 0.6 : 0.32)
+    }
+
     var body: some View {
         ZStack {
             pandaBody
@@ -42,7 +70,7 @@ struct PandaView: View {
         ZStack {
             // Cushion (when sitting / napping / relaxing)
             if viewModel.cushionVisible {
-                Cushion()
+                Cushion(gender: viewModel.gender)
                     .offset(y: 56)
                     .transition(.scale.combined(with: .opacity))
             }
@@ -85,7 +113,7 @@ struct PandaView: View {
 
             // Legs — normal stance when standing, crossed lotus when sitting
             if viewModel.sitting {
-                CrossedLegs()
+                CrossedLegs(gender: viewModel.gender)
                     .offset(y: 46)
                     .transition(.scale.combined(with: .opacity))
             } else {
@@ -106,6 +134,13 @@ struct PandaView: View {
 
             // Head
             head
+
+            // Boy pandas wear a blue bow tie at the neck — rendered in front
+            // of the body so it sits cleanly under the chin.
+            if viewModel.gender == .boy {
+                PandaBowtie()
+                    .offset(y: 17)
+            }
 
             // Raised arms render IN FRONT of the head so her paws are clearly
             // holding the bamboo at face level.
@@ -143,7 +178,8 @@ struct PandaView: View {
             ear(side: -1)
             ear(side: 1)
 
-            // Girl pandas wear a pink bow; boy pandas go bare-eared.
+            // Girl pandas wear a pink head bow; boy pandas wear a blue bow tie
+            // at the neck instead (rendered later, under the head shape).
             if viewModel.gender == .girl {
                 PandaBow()
                     .offset(x: 15, y: -49)
@@ -211,13 +247,13 @@ struct PandaView: View {
 
             // Cheeks (always faintly visible)
             Circle()
-                .fill(Color.pink.opacity(viewModel.blushVisible ? 0.6 : 0.32))
+                .fill(cheekColor)
                 .frame(width: 13, height: 10)
                 .offset(x: -22, y: -2)
                 .blur(radius: 1)
 
             Circle()
-                .fill(Color.pink.opacity(viewModel.blushVisible ? 0.6 : 0.32))
+                .fill(cheekColor)
                 .frame(width: 13, height: 10)
                 .offset(x: 22, y: -2)
                 .blur(radius: 1)
@@ -286,7 +322,7 @@ struct PandaView: View {
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [Color.pink.opacity(0.5), Color.pink.opacity(0.18)],
+                        colors: earInnerColors,
                         center: .topLeading,
                         startRadius: 1,
                         endRadius: 8
@@ -434,7 +470,7 @@ struct PandaView: View {
                 )
 
             Circle()
-                .fill(Color.pink.opacity(0.5))
+                .fill(smallPawPadColor)
                 .frame(width: 5, height: 4)
                 .offset(x: -3 * side, y: 2)
         }
@@ -453,7 +489,7 @@ struct PandaView: View {
                 .shadow(color: Color.black.opacity(0.2), radius: 1.5, x: 0, y: 1)
 
             Circle()
-                .fill(Color.pink.opacity(0.55))
+                .fill(pawPadColor)
                 .frame(width: 5, height: 4)
                 .offset(y: 1.5)
         }
@@ -499,9 +535,9 @@ struct PandaView: View {
                         .blur(radius: 0.5)
                 )
 
-            // Pink paw pad at the bottom (only really visible when raised).
+            // Paw pad at the bottom (only really visible when raised).
             Circle()
-                .fill(Color.pink.opacity(0.45))
+                .fill(isBoy ? Color(red: 0.45, green: 0.6, blue: 0.78).opacity(0.45) : Color.pink.opacity(0.45))
                 .frame(width: 7, height: 5)
                 .offset(y: 12)
         }
@@ -549,11 +585,17 @@ struct GrinPath: Shape {
 }
 
 struct CrossedLegs: View {
+    let gender: PandaGender
+
     private let darkFill = LinearGradient(
         colors: [Color(white: 0.22), Color(white: 0.08)],
         startPoint: .top,
         endPoint: .bottom
     )
+
+    private var footPadColor: Color {
+        gender == .boy ? Color(red: 0.45, green: 0.6, blue: 0.78).opacity(0.55) : Color.pink.opacity(0.55)
+    }
 
     var body: some View {
         ZStack {
@@ -590,9 +632,9 @@ struct CrossedLegs: View {
                 .frame(width: 11, height: 9)
                 .offset(x: 22, y: -2)
 
-            // Tiny pink pads on the feet
-            Circle().fill(Color.pink.opacity(0.55)).frame(width: 3, height: 2.5).offset(x: -22, y: -2)
-            Circle().fill(Color.pink.opacity(0.55)).frame(width: 3, height: 2.5).offset(x: 22, y: -2)
+            // Tiny paw pads on the feet — pink for girl, blue for boy
+            Circle().fill(footPadColor).frame(width: 3, height: 2.5).offset(x: -22, y: -2)
+            Circle().fill(footPadColor).frame(width: 3, height: 2.5).offset(x: 22, y: -2)
         }
     }
 }
@@ -627,26 +669,81 @@ struct PawsInLap: View {
 }
 
 struct Cushion: View {
-    private let topFill = LinearGradient(
-        colors: [
-            Color(red: 0.99, green: 0.78, blue: 0.9),
-            Color(red: 0.93, green: 0.58, blue: 0.75),
-            Color(red: 0.82, green: 0.4, blue: 0.6)
-        ],
-        startPoint: .top,
-        endPoint: .bottom
-    )
+    let gender: PandaGender
 
-    private let sideFill = LinearGradient(
-        colors: [
-            Color(red: 0.78, green: 0.36, blue: 0.55),
-            Color(red: 0.62, green: 0.22, blue: 0.42)
-        ],
-        startPoint: .top,
-        endPoint: .bottom
-    )
+    private var topFill: LinearGradient {
+        if gender == .boy {
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.78, green: 0.86, blue: 1.0),
+                    Color(red: 0.5, green: 0.66, blue: 0.92),
+                    Color(red: 0.28, green: 0.46, blue: 0.78)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        return LinearGradient(
+            colors: [
+                Color(red: 0.99, green: 0.78, blue: 0.9),
+                Color(red: 0.93, green: 0.58, blue: 0.75),
+                Color(red: 0.82, green: 0.4, blue: 0.6)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
 
-    private let trim = Color(red: 0.55, green: 0.15, blue: 0.32).opacity(0.85)
+    private var sideFill: LinearGradient {
+        if gender == .boy {
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.36, green: 0.5, blue: 0.78),
+                    Color(red: 0.2, green: 0.32, blue: 0.6)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        return LinearGradient(
+            colors: [
+                Color(red: 0.78, green: 0.36, blue: 0.55),
+                Color(red: 0.62, green: 0.22, blue: 0.42)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var trim: Color {
+        gender == .boy
+            ? Color(red: 0.15, green: 0.25, blue: 0.5).opacity(0.85)
+            : Color(red: 0.55, green: 0.15, blue: 0.32).opacity(0.85)
+    }
+
+    private var tuftCenterColors: [Color] {
+        gender == .boy
+            ? [Color(red: 0.32, green: 0.46, blue: 0.72), Color(red: 0.15, green: 0.22, blue: 0.42)]
+            : [Color(red: 0.7, green: 0.22, blue: 0.42), Color(red: 0.45, green: 0.1, blue: 0.25)]
+    }
+
+    private var tasselDarkColor: Color {
+        gender == .boy
+            ? Color(red: 0.18, green: 0.28, blue: 0.55)
+            : Color(red: 0.55, green: 0.15, blue: 0.32)
+    }
+
+    private var tasselPomColors: [Color] {
+        gender == .boy
+            ? [Color(red: 0.82, green: 0.9, blue: 1.0), Color(red: 0.42, green: 0.58, blue: 0.85)]
+            : [Color(red: 1.0, green: 0.78, blue: 0.88), Color(red: 0.85, green: 0.4, blue: 0.6)]
+    }
+
+    private var tasselStrandColor: Color {
+        gender == .boy
+            ? Color(red: 0.26, green: 0.38, blue: 0.68)
+            : Color(red: 0.65, green: 0.22, blue: 0.4)
+    }
 
     var body: some View {
         ZStack {
@@ -696,10 +793,7 @@ struct Cushion: View {
                 Circle()
                     .fill(
                         RadialGradient(
-                            colors: [
-                                Color(red: 0.7, green: 0.22, blue: 0.42),
-                                Color(red: 0.45, green: 0.1, blue: 0.25)
-                            ],
+                            colors: tuftCenterColors,
                             center: .topLeading,
                             startRadius: 1,
                             endRadius: 6
@@ -721,19 +815,27 @@ struct Cushion: View {
             // Corner tassels — full pom-poms with hanging strands.
             ForEach(0..<2, id: \.self) { i in
                 let xSign: CGFloat = i == 0 ? -1 : 1
-                CushionTassel()
-                    .offset(x: xSign * 50, y: 4)
+                CushionTassel(
+                    darkColor: tasselDarkColor,
+                    pomColors: tasselPomColors,
+                    strandColor: tasselStrandColor
+                )
+                .offset(x: xSign * 50, y: 4)
             }
         }
     }
 }
 
 private struct CushionTassel: View {
+    let darkColor: Color
+    let pomColors: [Color]
+    let strandColor: Color
+
     var body: some View {
         ZStack {
             // Knot at the cushion edge.
             Capsule()
-                .fill(Color(red: 0.55, green: 0.15, blue: 0.32))
+                .fill(darkColor)
                 .frame(width: 5, height: 4)
                 .offset(y: -2)
 
@@ -741,10 +843,7 @@ private struct CushionTassel: View {
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [
-                            Color(red: 1.0, green: 0.78, blue: 0.88),
-                            Color(red: 0.85, green: 0.4, blue: 0.6)
-                        ],
+                        colors: pomColors,
                         center: .topLeading,
                         startRadius: 1,
                         endRadius: 8
@@ -753,7 +852,7 @@ private struct CushionTassel: View {
                 .frame(width: 10, height: 10)
                 .overlay(
                     Circle()
-                        .stroke(Color(red: 0.55, green: 0.15, blue: 0.32).opacity(0.55), lineWidth: 0.8)
+                        .stroke(darkColor.opacity(0.55), lineWidth: 0.8)
                 )
                 .shadow(color: Color.black.opacity(0.18), radius: 1.5, x: 0, y: 1)
                 .offset(y: 4)
@@ -761,7 +860,7 @@ private struct CushionTassel: View {
             // Tiny dangling strands.
             ForEach(0..<3, id: \.self) { i in
                 Capsule()
-                    .fill(Color(red: 0.65, green: 0.22, blue: 0.4))
+                    .fill(strandColor)
                     .frame(width: 1, height: 4)
                     .offset(x: CGFloat(i - 1) * 2.5, y: 11)
             }
@@ -863,6 +962,76 @@ struct PandaBow: View {
             )
             .rotationEffect(.degrees(side == -1 ? -12 : 12))
             .offset(x: 3 * side, y: 7)
+    }
+}
+
+struct PandaBowtie: View {
+    private let tieFill = LinearGradient(
+        colors: [
+            Color(red: 0.55, green: 0.78, blue: 1.0),
+            Color(red: 0.32, green: 0.55, blue: 0.92),
+            Color(red: 0.18, green: 0.36, blue: 0.78)
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+
+    private let tieOutline = Color(red: 0.08, green: 0.18, blue: 0.42).opacity(0.85)
+
+    var body: some View {
+        ZStack {
+            // Left half — triangle pinched toward the centre knot.
+            BowtieHalf()
+                .fill(tieFill)
+                .overlay(BowtieHalf().stroke(tieOutline, lineWidth: 1.2))
+                .frame(width: 14, height: 11)
+                .scaleEffect(x: -1, y: 1)
+                .offset(x: -7)
+
+            // Right half — mirrored.
+            BowtieHalf()
+                .fill(tieFill)
+                .overlay(BowtieHalf().stroke(tieOutline, lineWidth: 1.2))
+                .frame(width: 14, height: 11)
+                .offset(x: 7)
+
+            // Centre knot — small rounded rectangle wrapping the join.
+            RoundedRectangle(cornerRadius: 2)
+                .fill(tieFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 2)
+                        .stroke(tieOutline, lineWidth: 1.1)
+                )
+                .frame(width: 6, height: 9)
+
+            // Top sheen on the knot — sells the satin.
+            Capsule()
+                .fill(Color.white.opacity(0.45))
+                .frame(width: 1.6, height: 6)
+                .offset(x: -1)
+        }
+        .shadow(color: Color.black.opacity(0.3), radius: 1.6, x: 0, y: 1.2)
+    }
+}
+
+private struct BowtieHalf: Shape {
+    func path(in rect: CGRect) -> Path {
+        // Triangle with the pinched point on the LEFT (knot side) and the
+        // outer edge slightly curved to give the bowtie its rounded look.
+        var path = Path()
+        let knot = CGPoint(x: rect.minX, y: rect.midY)
+        let topOuter = CGPoint(x: rect.maxX, y: rect.minY)
+        let bottomOuter = CGPoint(x: rect.maxX, y: rect.maxY)
+
+        path.move(to: knot)
+        path.addLine(to: topOuter)
+        path.addQuadCurve(
+            to: bottomOuter,
+            control: CGPoint(x: rect.maxX + rect.width * 0.12, y: rect.midY)
+        )
+        path.addLine(to: knot)
+        path.closeSubpath()
+        return path
     }
 }
 
