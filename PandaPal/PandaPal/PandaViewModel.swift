@@ -133,6 +133,10 @@ final class PandaViewModel: ObservableObject {
 
     private var idleTimer: Timer?
     private var wanderTimer: Timer?
+    private var blinkTimer: Timer?
+    // True only while an ambient blink owns the eyelids, so the auto-reopen
+    // never fights an animation that deliberately closed/opened her eyes.
+    private var ambientBlinkActive = false
     private var activeTimers: [Timer] = []
     private var dragFlailTimer: Timer?
     private var chaseWalkTimer: Timer?
@@ -162,11 +166,13 @@ final class PandaViewModel: ObservableObject {
     init() {
         scheduleNextIdle()
         scheduleNextWander(initial: true)
+        scheduleNextBlink()
     }
 
     deinit {
         idleTimer?.invalidate()
         wanderTimer?.invalidate()
+        blinkTimer?.invalidate()
     }
 
     // MARK: - Public interactions
@@ -188,29 +194,42 @@ final class PandaViewModel: ObservableObject {
         cancelTimers()
         resetTransientState()
 
-        let reactions: [() -> Void] = [
+        // Clicking her is petting her — every tap is a little burst of
+        // affection. The 15 reactions below are all cuddly by design; the
+        // showier tricks (spin, backflip, flex, …) live in the idle pool now
+        // so she does them on her own time, not when she's being loved on.
+        let pettingReactions: [() -> Void] = [
             { self.reactHappy() },
             { self.reactGiggle() },
             { self.reactStarStruck() },
             { self.reactBoop() },
-            { self.reactSurprised() },
-            { self.reactDance() },
-            { self.reactSpin() },
-            { self.reactJump() },
             { self.reactBlowKiss() },
-            { self.reactBackflip() },
-            { self.reactRaspberry() },
-            { self.reactHiccup() },
-            { self.reactWiggleButt() },
             { self.reactShy() },
-            { self.reactClap() },
-            { self.reactFlex() },
-            { self.reactThinking() },
-            { self.reactStargaze() },
-            { self.reactPhotoshoot() },
-            { self.reactNuzzle() }
+            { self.reactNuzzle() },
+            { self.petMelt() },
+            { self.petLeanIn() },
+            { self.petPurr() },
+            { self.petEarFlutter() },
+            { self.petChinUp() },
+            { self.petSnuggle() },
+            { self.petSwoon() },
+            { self.petTippyTaps() },
+            { self.petHeartEyes() },
+            { self.petWiggleHappy() },
+            { self.petHop() },
+            { self.petSpinJoy() },
+            { self.petPeekaboo() },
+            { self.petBlep() },
+            { self.petRollOver() },
+            { self.petStarryGaze() },
+            { self.petHumSway() },
+            { self.petBounceClaps() },
+            { self.petBigStretch() },
+            { self.petShiver() },
+            { self.petHeadBob() },
+            { self.petFlop() }
         ]
-        reactions.randomElement()?()
+        pettingReactions.randomElement()?()
     }
 
     func pet() {
@@ -222,7 +241,7 @@ final class PandaViewModel: ObservableObject {
         cancelTimers()
         resetTransientState()
         isBusy = true
-        playBambooFeast(celebratory: true)
+        playBambooFeast()
     }
 
     func waveHello() {
@@ -366,6 +385,41 @@ final class PandaViewModel: ObservableObject {
         idleTimer = timer
     }
 
+    // An ambient blink runs on its own clock at a natural human rate (~every
+    // 3–5s), completely independent of the animation lifecycle — she keeps
+    // blinking no matter what else she's doing. cancelTimers() never touches it.
+    private func scheduleNextBlink() {
+        blinkTimer?.invalidate()
+        let delay = Double.random(in: 2.8...5.4)
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
+            self?.ambientBlink()
+            self?.scheduleNextBlink()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        blinkTimer = timer
+    }
+
+    private func ambientBlink() {
+        // Only blink from her normal open-eyed state — never override an
+        // animation that's deliberately holding her eyes closed/heart/starry,
+        // and never blink while she's resting with her eyes already shut.
+        guard !eyesClosed, !eyesHeart, !eyesStarry, !isResting else { return }
+
+        ambientBlinkActive = true
+        withAnimation(.easeInOut(duration: 0.07)) {
+            eyesClosed = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            // If anything else grabbed the eyelids during the blink, leave them be.
+            guard self.ambientBlinkActive else { return }
+            self.ambientBlinkActive = false
+            withAnimation(.easeInOut(duration: 0.07)) {
+                self.eyesClosed = false
+            }
+        }
+    }
+
     private func scheduleNextWander(initial: Bool = false) {
         wanderTimer?.invalidate()
         // Roam more often than the original 8...16s, but not constantly.
@@ -420,6 +474,10 @@ final class PandaViewModel: ObservableObject {
     }
 
     private func resetTransientState() {
+        // A starting animation owns the eyelids now — drop any pending blink
+        // reopen so it can't flicker mid-animation.
+        ambientBlinkActive = false
+
         withAnimation(.easeInOut(duration: 0.2)) {
             leftArmRaised = false
             rightArmRaised = false
@@ -483,7 +541,25 @@ final class PandaViewModel: ObservableObject {
             { self.idleNapOnCushion() }
         ]
 
-        let pool = light + light + occasional
+        // The showy tricks used to fire on tap; now that tapping is petting,
+        // they live here so she performs them spontaneously while idle.
+        let tricks: [() -> Void] = [
+            { self.reactSurprised() },
+            { self.reactDance() },
+            { self.reactSpin() },
+            { self.reactJump() },
+            { self.reactBackflip() },
+            { self.reactRaspberry() },
+            { self.reactHiccup() },
+            { self.reactWiggleButt() },
+            { self.reactClap() },
+            { self.reactFlex() },
+            { self.reactThinking() },
+            { self.reactStargaze() },
+            { self.reactPhotoshoot() }
+        ]
+
+        let pool = light + light + tricks + occasional
         pool.randomElement()?()
     }
 
@@ -802,42 +878,75 @@ final class PandaViewModel: ObservableObject {
             }
         }
 
-        // 6. GOT IT! Sit up triumphant — heart eyes, blush, a shower of hearts.
+        // 6. GOT IT! An excited celebration — heart eyes, arms thrown up, a
+        // shower of hearts and a star.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation(.spring(response: 0.34, dampingFraction: 0.55)) {
-                self.bodyOffsetY = -8
-                self.squashScale = 1.08
-                self.shadowScale = 0.92
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                self.bodyOffsetY = -12
+                self.squashScale = 1.1
+                self.shadowScale = 0.85
                 self.eyesWide = false
                 self.eyesHeart = true
                 self.blushVisible = true
                 self.mouthShape = .grin
                 self.headTilt = 0
                 self.lookVertical = 0
-                self.leftArmWave = 0
-                self.rightArmWave = 0
+                self.leftArmRaised = true
+                self.rightArmRaised = true
+                self.leftArmWave = -30
+                self.rightArmWave = 30
             }
-            for i in 0..<3 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.12) {
-                    self.spawnParticle(.heart, at: CGSize(width: CGFloat.random(in: -24...24), height: -34))
+            for i in 0..<4 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.1) {
+                    self.spawnParticle(.heart, at: CGSize(width: CGFloat.random(in: -26...26), height: -36))
                 }
             }
-            self.spawnParticle(.star, at: CGSize(width: 0, height: -44))
+            self.spawnParticle(.star, at: CGSize(width: 0, height: -46))
         }
 
-        // 7. Settle back to neutral and resume normal scheduling.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.3) {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                self.bodyOffsetY = 0
-                self.squashScale = 1.0
-                self.shadowScale = 1.0
-                self.leftArmRaised = false
-                self.rightArmRaised = false
-                self.eyesHeart = false
-                self.blushVisible = false
-                self.mouthShape = .smile
+        // Two quick, giddy bounces in place — she can't contain herself.
+        for (idx, delay) in [1.78, 2.06].enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                withAnimation(.spring(response: 0.16, dampingFraction: 0.45)) {
+                    self.bodyOffsetY = -16
+                    self.headTilt = idx % 2 == 0 ? -5 : 5
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                    withAnimation(.spring(response: 0.2, dampingFraction: 0.5)) {
+                        self.bodyOffsetY = -6
+                        self.headTilt = 0
+                    }
+                }
             }
-            self.finishAnimation()
+        }
+
+        // 7. Then she brings the caught bamboo up and happily munches it down.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            self.eatCaughtBamboo()
+        }
+    }
+
+    // After the excited catch she settles her pose and tucks into the bamboo
+    // she just bagged — the celebratory feast (chomps, leaves, a final heart)
+    // owns the wind-down and resumes normal scheduling.
+    private func eatCaughtBamboo() {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+            eyesHeart = false
+            eyesStarry = false
+            eyesWide = false
+            bounceScale = 1.0
+            bodyOffsetY = 0
+            shadowScale = 1.0
+            squashScale = 1.0
+            leftArmRaised = false
+            rightArmRaised = false
+            leftArmWave = 0
+            rightArmWave = 0
+            headTilt = 0
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            self.playBambooFeast()
         }
     }
 
@@ -1027,12 +1136,11 @@ final class PandaViewModel: ObservableObject {
         registerTimer(timer)
     }
 
-    private func idleEatBamboo() {
-        playBambooFeast(celebratory: false)
-    }
-
-    private func playBambooFeast(celebratory: Bool) {
-        // Bamboo flies in from upper-right toward her hands.
+    // She only ever eats bamboo when you feed her or when she catches it on a
+    // hunt — never as a spontaneous idle, so there's no "she's just snacking
+    // again" filler. Bamboo flies in from the upper-right toward her hands and
+    // she happily chomps it down.
+    private func playBambooFeast() {
         bambooEntryOffset = CGSize(width: 70, height: -60)
         bambooTilt = -85
         bambooScale = 0.7
@@ -1045,14 +1153,14 @@ final class PandaViewModel: ObservableObject {
             leftArmRaised = true
             rightArmRaised = true
             mouthShape = .ohh
-            blushVisible = celebratory
+            blushVisible = true
             lookDirection = 4
             lookVertical = -2
             bodyOffsetY = -2
         }
 
         var chomps = 0
-        let maxChomps = celebratory ? 8 : 6
+        let maxChomps = 8
         let timer = Timer.scheduledTimer(withTimeInterval: 0.39, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             chomps += 1
@@ -1069,7 +1177,7 @@ final class PandaViewModel: ObservableObject {
             if chomps % 2 == 0 {
                 self.spawnParticle(.bambooLeaf, at: CGSize(width: 8, height: -8))
             }
-            if celebratory && chomps == maxChomps - 1 {
+            if chomps == maxChomps - 1 {
                 self.spawnParticle(.sparkle, at: CGSize(width: -18, height: -28))
                 self.spawnParticle(.sparkle, at: CGSize(width: 18, height: -32))
             }
@@ -1081,22 +1189,18 @@ final class PandaViewModel: ObservableObject {
                     self.bambooEntryOffset = .zero
                     self.leftArmRaised = false
                     self.rightArmRaised = false
-                    self.mouthShape = celebratory ? .grin : .smile
+                    self.mouthShape = .grin
                     self.headTilt = 0
                     self.bodyOffsetY = 0
                     self.squashScale = 1.0
                     self.lookDirection = 0
                     self.blushVisible = false
                 }
-                if celebratory {
-                    self.spawnParticle(.heart, at: CGSize(width: 0, height: -38))
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            self.mouthShape = .smile
-                        }
-                        self.finishAnimation()
+                self.spawnParticle(.heart, at: CGSize(width: 0, height: -38))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        self.mouthShape = .smile
                     }
-                } else {
                     self.finishAnimation()
                 }
             }
@@ -2069,6 +2173,793 @@ final class PandaViewModel: ObservableObject {
                 self.squashScale = 1.0
                 self.bounceScale = 1.0
             }
+        }
+    }
+
+    // MARK: - Petting reactions (random, tap-only)
+
+    // She goes limp with bliss — sinks down, eyes shut into happy arcs, sighs
+    // out a heart.
+    private func petMelt() {
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
+            eyesClosed = true
+            mouthShape = .grin
+            blushVisible = true
+            bodyOffsetY = 6
+            squashScale = 0.9
+            headTilt = 6
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.spawnParticle(.heart, at: CGSize(width: 0, height: -30))
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.8)) {
+                self.eyesClosed = false
+                self.mouthShape = .smile
+                self.blushVisible = false
+                self.bodyOffsetY = 0
+                self.squashScale = 1.0
+                self.headTilt = 0
+            }
+            self.finishAnimation()
+        }
+    }
+
+    // Tips her head into the hand and squints, melting into the touch.
+    private func petLeanIn() {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+            headTilt = -16
+            lookVertical = -3
+            eyesClosed = true
+            mouthShape = .grin
+            blushVisible = true
+            bodyOffsetY = -1
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                self.headTilt = -10
+                self.earWiggle = 3
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                self.headTilt = 0
+                self.lookVertical = 0
+                self.earWiggle = 0
+                self.eyesClosed = false
+                self.mouthShape = .smile
+                self.blushVisible = false
+            }
+            self.finishAnimation()
+        }
+    }
+
+    // A blissful purr — a fast, tiny vibration with closed happy eyes and
+    // little hearts drifting up.
+    private func petPurr() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            eyesClosed = true
+            mouthShape = .smile
+            blushVisible = true
+        }
+
+        var i = 0
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.09, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            withAnimation(.easeInOut(duration: 0.06)) {
+                self.bodyRoll = i % 2 == 0 ? 1.5 : -1.5
+                self.bodyOffsetY = i % 2 == 0 ? -1 : 1
+            }
+            if i % 6 == 0 {
+                self.spawnParticle(.heart, at: CGSize(width: CGFloat.random(in: -12...12), height: -28))
+            }
+            i += 1
+            if i >= 16 {
+                timer.invalidate()
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    self.bodyRoll = 0
+                    self.bodyOffsetY = 0
+                    self.eyesClosed = false
+                    self.blushVisible = false
+                    self.mouthShape = .smile
+                }
+                self.finishAnimation()
+            }
+        }
+        registerTimer(timer)
+    }
+
+    // Half-lidded contentment with softly fluttering ears.
+    private func petEarFlutter() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            eyesClosed = true
+            mouthShape = .grin
+            blushVisible = true
+            headTilt = 4
+        }
+
+        var i = 0
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.18, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            withAnimation(.easeInOut(duration: 0.12)) {
+                self.earWiggle = i % 2 == 0 ? 4 : -4
+                self.headTilt = i % 2 == 0 ? 4 : 2
+            }
+            i += 1
+            if i >= 7 {
+                timer.invalidate()
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    self.earWiggle = 0
+                    self.headTilt = 0
+                    self.eyesClosed = false
+                    self.mouthShape = .smile
+                    self.blushVisible = false
+                }
+                self.finishAnimation()
+            }
+        }
+        registerTimer(timer)
+    }
+
+    // Lifts her chin and gazes up adoringly at whoever's petting her.
+    private func petChinUp() {
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+            lookVertical = -9
+            headTilt = -4
+            mouthShape = .grin
+            blushVisible = true
+            bodyOffsetY = -2
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.spawnParticle(.heart, at: CGSize(width: 0, height: -38))
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
+                self.lookVertical = 0
+                self.headTilt = 0
+                self.mouthShape = .smile
+                self.blushVisible = false
+                self.bodyOffsetY = 0
+            }
+            self.finishAnimation()
+        }
+    }
+
+    // Hugs her own arms in and snuggles into the warmth.
+    private func petSnuggle() {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.78)) {
+            leftArmRaised = true
+            rightArmRaised = true
+            leftArmWave = -42
+            rightArmWave = 42
+            eyesClosed = true
+            mouthShape = .grin
+            blushVisible = true
+            headTilt = 8
+            squashScale = 0.96
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                self.headTilt = -6
+            }
+            self.spawnParticle(.heart, at: CGSize(width: 0, height: -30))
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                self.leftArmRaised = false
+                self.rightArmRaised = false
+                self.leftArmWave = 0
+                self.rightArmWave = 0
+                self.eyesClosed = false
+                self.mouthShape = .smile
+                self.blushVisible = false
+                self.headTilt = 0
+                self.squashScale = 1.0
+            }
+            self.finishAnimation()
+        }
+    }
+
+    // Swoons — head lolls back, a happy sigh, sparkles and a heart.
+    private func petSwoon() {
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.7)) {
+            headTilt = -14
+            lookVertical = -6
+            mouthShape = .ohh
+            eyesClosed = true
+            blushVisible = true
+            bodyOffsetY = -3
+            squashScale = 1.03
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            self.spawnParticle(.sparkle, at: CGSize(width: -20, height: -30))
+            self.spawnParticle(.heart, at: CGSize(width: 14, height: -34))
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                self.headTilt = 8
+                self.mouthShape = .grin
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
+                self.headTilt = 0
+                self.lookVertical = 0
+                self.mouthShape = .smile
+                self.eyesClosed = false
+                self.blushVisible = false
+                self.bodyOffsetY = 0
+                self.squashScale = 1.0
+            }
+            self.finishAnimation()
+        }
+    }
+
+    // A happy little tippy-tap dance of the feet while she beams.
+    private func petTippyTaps() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            mouthShape = .grin
+            blushVisible = true
+            eyesWide = true
+        }
+
+        var i = 0
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.14, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            withAnimation(.spring(response: 0.12, dampingFraction: 0.55)) {
+                self.leadingPawSide = i % 2 == 0 ? -1 : 1
+                self.walkFootLift = 5
+                self.walkStride = i % 2 == 0 ? 3 : -3
+                self.bodyOffsetY = -3
+                self.headTilt = i % 2 == 0 ? 3 : -3
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.07) {
+                withAnimation(.spring(response: 0.12, dampingFraction: 0.6)) {
+                    self.walkFootLift = 0
+                    self.bodyOffsetY = 0
+                }
+            }
+            i += 1
+            if i >= 8 {
+                timer.invalidate()
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                    self.walkStride = 0
+                    self.walkFootLift = 0
+                    self.headTilt = 0
+                    self.eyesWide = false
+                    self.mouthShape = .smile
+                    self.blushVisible = false
+                }
+                self.spawnParticle(.heart, at: CGSize(width: 0, height: -32))
+                self.finishAnimation()
+            }
+        }
+        registerTimer(timer)
+    }
+
+    // Eyes burst into hearts, a big delighted grin and a shower of hearts.
+    private func petHeartEyes() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+            eyesHeart = true
+            mouthShape = .grin
+            blushVisible = true
+            bounceScale = 1.16
+            headTilt = -4
+        }
+
+        for i in 0..<4 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.12) {
+                self.spawnParticle(.heart, at: CGSize(width: CGFloat.random(in: -26...26), height: -38))
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                self.bounceScale = 1.0
+                self.headTilt = 3
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                self.eyesHeart = false
+                self.mouthShape = .smile
+                self.blushVisible = false
+                self.headTilt = 0
+            }
+            self.finishAnimation()
+        }
+    }
+
+    // A happy wiggle — eyes wide and bright, whole body rocking side to side.
+    private func petWiggleHappy() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            eyesWide = true
+            mouthShape = .grin
+            blushVisible = true
+        }
+
+        var i = 0
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            withAnimation(.easeInOut(duration: 0.16)) {
+                self.bodyRoll = i % 2 == 0 ? 9 : -9
+                self.headTilt = i % 2 == 0 ? 5 : -5
+                self.bodyOffsetY = i % 2 == 0 ? -3 : 0
+            }
+            i += 1
+            if i >= 7 {
+                timer.invalidate()
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                    self.bodyRoll = 0
+                    self.headTilt = 0
+                    self.bodyOffsetY = 0
+                    self.eyesWide = false
+                    self.mouthShape = .smile
+                    self.blushVisible = false
+                }
+                self.finishAnimation()
+            }
+        }
+        registerTimer(timer)
+    }
+
+    // Springs up with a delighted little hop, arms flung up.
+    private func petHop() {
+        withAnimation(.spring(response: 0.16, dampingFraction: 0.5)) {
+            squashScale = 0.86
+            mouthShape = .ohh
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.55)) {
+                self.bodyOffsetY = -22
+                self.squashScale = 1.1
+                self.shadowScale = 0.6
+                self.eyesWide = true
+                self.blushVisible = true
+                self.leftArmRaised = true
+                self.rightArmRaised = true
+            }
+            self.spawnParticle(.heart, at: CGSize(width: 0, height: -30))
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.55)) {
+                self.bodyOffsetY = 0
+                self.squashScale = 0.94
+                self.shadowScale = 1.1
+                self.mouthShape = .grin
+                self.leftArmRaised = false
+                self.rightArmRaised = false
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.85) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                self.squashScale = 1.0
+                self.shadowScale = 1.0
+                self.eyesWide = false
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    self.mouthShape = .smile
+                    self.blushVisible = false
+                }
+                self.finishAnimation()
+            }
+        }
+    }
+
+    // A giddy little twirl of joy.
+    private func petSpinJoy() {
+        withAnimation(.easeInOut(duration: 0.6)) {
+            bodyRoll = 360
+            mouthShape = .grin
+            blushVisible = true
+            bodyOffsetY = -6
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            self.spawnParticle(.heart, at: CGSize(width: 0, height: -36))
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
+            self.bodyRoll = 0
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                self.bodyOffsetY = 0
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                self.mouthShape = .smile
+                self.blushVisible = false
+            }
+            self.finishAnimation()
+        }
+    }
+
+    // Hides behind her paws, then peeks out wide-eyed and giggly.
+    private func petPeekaboo() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            leftArmRaised = true
+            rightArmRaised = true
+            leftArmWave = -55
+            rightArmWave = 55
+            eyesClosed = true
+            mouthShape = .smile
+            headTilt = 4
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                self.leftArmWave = -30
+                self.rightArmWave = 30
+                self.eyesClosed = false
+                self.eyesWide = true
+                self.blushVisible = true
+                self.mouthShape = .grin
+                self.headTilt = -3
+            }
+            self.spawnParticle(.heart, at: CGSize(width: 0, height: -32))
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                self.leftArmRaised = false
+                self.rightArmRaised = false
+                self.leftArmWave = 0
+                self.rightArmWave = 0
+                self.eyesWide = false
+                self.blushVisible = false
+                self.mouthShape = .smile
+                self.headTilt = 0
+            }
+            self.finishAnimation()
+        }
+    }
+
+    // A goofy, blissed-out blep — tips her head back with a little tongue-out
+    // yawn shape before blinking back to a happy smile.
+    private func petBlep() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            mouthShape = .yawn
+            eyesClosed = true
+            headTilt = 10
+            blushVisible = true
+            squashScale = 1.04
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            self.spawnParticle(.sparkle, at: CGSize(width: 18, height: -10))
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                self.eyesClosed = false
+                self.eyesWide = true
+                self.headTilt = -4
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                self.mouthShape = .smile
+                self.eyesWide = false
+                self.headTilt = 0
+                self.blushVisible = false
+                self.squashScale = 1.0
+            }
+            self.finishAnimation()
+        }
+    }
+
+    // Flops onto her back for belly rubs — paws up, blissed right out.
+    private func petRollOver() {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+            bodyRoll = -22
+            bodyOffsetY = 8
+            squashScale = 1.06
+            leftArmRaised = true
+            rightArmRaised = true
+            leftArmWave = -20
+            rightArmWave = 20
+            eyesClosed = true
+            mouthShape = .grin
+            blushVisible = true
+            headTilt = -10
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                self.bodyRoll = -16
+                self.leftArmWave = -32
+                self.rightArmWave = 32
+            }
+            self.spawnParticle(.heart, at: CGSize(width: 0, height: -26))
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.78)) {
+                self.bodyRoll = 0
+                self.bodyOffsetY = 0
+                self.squashScale = 1.0
+                self.leftArmRaised = false
+                self.rightArmRaised = false
+                self.leftArmWave = 0
+                self.rightArmWave = 0
+                self.eyesClosed = false
+                self.mouthShape = .smile
+                self.blushVisible = false
+                self.headTilt = 0
+            }
+            self.finishAnimation()
+        }
+    }
+
+    // Gazes up with big starry eyes, swaying gently — utterly smitten.
+    private func petStarryGaze() {
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+            eyesStarry = true
+            lookVertical = -8
+            mouthShape = .ohh
+            blushVisible = true
+            headTilt = -6
+        }
+        spawnParticle(.star, at: CGSize(width: -16, height: -40))
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.easeInOut(duration: 0.6)) {
+                self.headTilt = 6
+            }
+            self.spawnParticle(.star, at: CGSize(width: 18, height: -42))
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                self.headTilt = -2
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
+                self.eyesStarry = false
+                self.lookVertical = 0
+                self.mouthShape = .smile
+                self.blushVisible = false
+                self.headTilt = 0
+            }
+            self.finishAnimation()
+        }
+    }
+
+    // Closes her eyes and hums, swaying her head dreamily to her own tune.
+    private func petHumSway() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            eyesClosed = true
+            mouthShape = .ohh
+            blushVisible = true
+        }
+
+        var i = 0
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            withAnimation(.easeInOut(duration: 0.4)) {
+                self.headTilt = i % 2 == 0 ? 7 : -7
+                self.bodyOffsetY = i % 2 == 0 ? -2 : 1
+            }
+            self.spawnParticle(.musicNote, at: CGSize(width: i % 2 == 0 ? 20 : -20, height: -30))
+            i += 1
+            if i >= 5 {
+                timer.invalidate()
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    self.headTilt = 0
+                    self.bodyOffsetY = 0
+                    self.eyesClosed = false
+                    self.mouthShape = .smile
+                    self.blushVisible = false
+                }
+                self.finishAnimation()
+            }
+        }
+        registerTimer(timer)
+    }
+
+    // Claps her paws and bounces, giddy with delight.
+    private func petBounceClaps() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            mouthShape = .grin
+            blushVisible = true
+            eyesWide = true
+            leftArmRaised = true
+            rightArmRaised = true
+        }
+
+        var i = 0
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.26, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            let together = i % 2 == 0
+            withAnimation(.spring(response: 0.13, dampingFraction: 0.5)) {
+                self.leftArmWave = together ? 30 : 0
+                self.rightArmWave = together ? -30 : 0
+                self.bodyOffsetY = together ? -8 : 0
+                self.squashScale = together ? 0.96 : 1.02
+            }
+            if together {
+                self.spawnParticle(.musicNote, at: CGSize(width: CGFloat.random(in: -18...18), height: -28))
+            }
+            i += 1
+            if i >= 6 {
+                timer.invalidate()
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                    self.leftArmRaised = false
+                    self.rightArmRaised = false
+                    self.leftArmWave = 0
+                    self.rightArmWave = 0
+                    self.bodyOffsetY = 0
+                    self.squashScale = 1.0
+                    self.eyesWide = false
+                    self.mouthShape = .smile
+                    self.blushVisible = false
+                }
+                self.finishAnimation()
+            }
+        }
+        registerTimer(timer)
+    }
+
+    // A luxurious cat-stretch into the petting, then she melts down content.
+    private func petBigStretch() {
+        withAnimation(.easeInOut(duration: 0.5)) {
+            leftArmRaised = true
+            rightArmRaised = true
+            leftArmWave = -20
+            rightArmWave = 20
+            bodyOffsetY = -10
+            squashScale = 1.1
+            mouthShape = .yawn
+            eyesClosed = true
+            headTilt = -4
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                self.bodyOffsetY = 4
+                self.squashScale = 0.94
+                self.leftArmRaised = false
+                self.rightArmRaised = false
+                self.leftArmWave = 0
+                self.rightArmWave = 0
+                self.mouthShape = .grin
+                self.blushVisible = true
+                self.headTilt = 5
+            }
+            self.spawnParticle(.heart, at: CGSize(width: 0, height: -28))
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                self.bodyOffsetY = 0
+                self.squashScale = 1.0
+                self.eyesClosed = false
+                self.mouthShape = .smile
+                self.blushVisible = false
+                self.headTilt = 0
+            }
+            self.finishAnimation()
+        }
+    }
+
+    // A happy little full-body shiver of delight, eyes wide and sparkly.
+    private func petShiver() {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            eyesWide = true
+            mouthShape = .grin
+            blushVisible = true
+        }
+
+        var i = 0
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            let dir: CGFloat = i % 2 == 0 ? 1 : -1
+            withAnimation(.linear(duration: 0.04)) {
+                self.bodyRoll = Double(dir) * 2.5
+                self.headTilt = Double(dir) * 2
+            }
+            if i == 6 {
+                self.spawnParticle(.sparkle, at: CGSize(width: -18, height: -26))
+                self.spawnParticle(.sparkle, at: CGSize(width: 18, height: -28))
+            }
+            i += 1
+            if i >= 16 {
+                timer.invalidate()
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                    self.bodyRoll = 0
+                    self.headTilt = 0
+                    self.eyesWide = false
+                    self.mouthShape = .smile
+                    self.blushVisible = false
+                }
+                self.spawnParticle(.heart, at: CGSize(width: 0, height: -30))
+                self.finishAnimation()
+            }
+        }
+        registerTimer(timer)
+    }
+
+    // Bobs her head to a happy little beat, ears bouncing along.
+    private func petHeadBob() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            mouthShape = .grin
+            blushVisible = true
+        }
+
+        var i = 0
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.28, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            let down = i % 2 == 0
+            withAnimation(.spring(response: 0.16, dampingFraction: 0.5)) {
+                self.bodyOffsetY = down ? -5 : 1
+                self.headTilt = down ? 5 : -5
+                self.earWiggle = down ? 3 : -3
+            }
+            if i % 2 == 0 {
+                self.spawnParticle(.musicNote, at: CGSize(width: down ? 18 : -18, height: -30))
+            }
+            i += 1
+            if i >= 7 {
+                timer.invalidate()
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                    self.bodyOffsetY = 0
+                    self.headTilt = 0
+                    self.earWiggle = 0
+                    self.mouthShape = .smile
+                    self.blushVisible = false
+                }
+                self.finishAnimation()
+            }
+        }
+        registerTimer(timer)
+    }
+
+    // Lets her head loll all the way to one side, totally relaxed.
+    private func petFlop() {
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            headTilt = 22
+            bodyRoll = 6
+            eyesClosed = true
+            mouthShape = .smile
+            blushVisible = true
+            squashScale = 0.97
+            lookVertical = 2
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            self.spawnParticle(.heart, at: CGSize(width: 16, height: -24))
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.8)) {
+                self.headTilt = 0
+                self.bodyRoll = 0
+                self.eyesClosed = false
+                self.blushVisible = false
+                self.squashScale = 1.0
+                self.lookVertical = 0
+            }
+            self.finishAnimation()
         }
     }
 

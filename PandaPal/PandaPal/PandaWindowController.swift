@@ -1,6 +1,20 @@
 import AppKit
 import SwiftUI
 
+// Private CoreGraphics / window-server (SkyLight) bindings used to hide the
+// system cursor from a background, accessory-policy app. Setting the
+// "SetsCursorInBackground" connection property makes CGDisplayHideCursor take
+// effect even while we're not the frontmost app — without it the hide is
+// silently ignored for an LSUIElement process. These are long-standing entry
+// points used by many menu-bar utilities; this app ships outside the App Store
+// (Sparkle auto-updates), so the private dependency is acceptable.
+@_silgen_name("CGSMainConnectionID")
+func CGSMainConnectionID() -> Int32
+
+@_silgen_name("CGSSetConnectionProperty")
+@discardableResult
+func CGSSetConnectionProperty(_ cid: Int32, _ target: Int32, _ key: CFString, _ value: CFTypeRef) -> Int32
+
 final class PandaWindowController: NSWindowController {
     private let baseSize = NSSize(width: 180, height: 200)
     private let positionKey = "PandaPal.lastPosition"
@@ -131,9 +145,11 @@ final class PandaWindowController: NSWindowController {
         guard let window = window else { return }
         wanderTimer?.invalidate()
         wanderTimer = nil
-        // Grabbing her mid-hunt cancels the chase so the drag wins.
+        // Grabbing her mid-hunt cancels the chase so the drag wins — and the
+        // bamboo cursor reverts to the normal arrow.
         chaseTimer?.invalidate()
         chaseTimer = nil
+        hideBambooCursor()
         let mouse = NSEvent.mouseLocation
         dragOffset = NSPoint(
             x: window.frame.origin.x - mouse.x,
@@ -155,6 +171,117 @@ final class PandaWindowController: NSWindowController {
     private var wanderTimer: Timer?
     private var chaseTimer: Timer?
 
+    // While she's hunting, the cursor becomes the bamboo she's chasing: we hide
+    // the system arrow and ride a little 🎋 overlay on the cursor hotspot. The
+    // overlay is glued to the cursor by a mouse-moved event monitor (not the
+    // chase timer) so it tracks every native mouse event without lag or
+    // sticking, even when you whip the cursor around. It freezes where she
+    // pounces and poofs away as she catches it.
+    private var bambooCursorWindow: NSPanel?
+    private var bambooCursorMonitors: [Any] = []
+    private var systemCursorHidden = false
+    private var backgroundCursorHidingEnabled = false
+
+    private func showBambooCursor() {
+        if bambooCursorWindow == nil {
+            let size = NSSize(width: 54, height: 60)
+            let panel = NSPanel(
+                contentRect: NSRect(origin: .zero, size: size),
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = false
+            panel.ignoresMouseEvents = true
+            // Above the panda so the bamboo always reads as the thing she's
+            // chasing, right up until she catches it.
+            panel.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+            let host = NSHostingView(rootView: BambooCursorView())
+            host.frame = NSRect(origin: .zero, size: size)
+            panel.contentView = host
+            bambooCursorWindow = panel
+        }
+
+        moveBambooCursorToMouse()
+        bambooCursorWindow?.orderFront(nil)
+        startTrackingBambooCursor()
+
+        if !systemCursorHidden {
+            // A plain CGDisplayHideCursor is ignored for a background/accessory
+            // app — the cursor only hides while we're frontmost. Opting our
+            // window-server connection into "SetsCursorInBackground" first makes
+            // the hide stick system-wide regardless of focus.
+            enableBackgroundCursorHiding()
+            CGDisplayHideCursor(CGMainDisplayID())
+            systemCursorHidden = true
+        }
+    }
+
+    private func enableBackgroundCursorHiding() {
+        guard !backgroundCursorHidingEnabled else { return }
+        let connection = CGSMainConnectionID()
+        CGSSetConnectionProperty(
+            connection,
+            connection,
+            "SetsCursorInBackground" as CFString,
+            kCFBooleanTrue
+        )
+        backgroundCursorHidingEnabled = true
+    }
+
+    // Follow the cursor on every mouse-moved event (global = while it's over
+    // other apps, local = while it's over our own windows) so the bamboo stays
+    // pinned to the cursor no matter how fast it moves.
+    private func startTrackingBambooCursor() {
+        guard bambooCursorMonitors.isEmpty else { return }
+        let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
+
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: events, handler: { [weak self] _ in
+            self?.moveBambooCursorToMouse()
+        }) {
+            bambooCursorMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: events, handler: { [weak self] event in
+            self?.moveBambooCursorToMouse()
+            return event
+        }) {
+            bambooCursorMonitors.append(local)
+        }
+    }
+
+    private func stopTrackingBambooCursor() {
+        for monitor in bambooCursorMonitors {
+            NSEvent.removeMonitor(monitor)
+        }
+        bambooCursorMonitors.removeAll()
+    }
+
+    private func moveBambooCursorToMouse() {
+        guard let win = bambooCursorWindow else { return }
+        let mouse = NSEvent.mouseLocation
+        let size = win.frame.size
+        win.setFrameOrigin(NSPoint(x: mouse.x - size.width / 2, y: mouse.y - size.height / 2))
+    }
+
+    // Stop following the cursor and pin the bamboo where she's pouncing, so it
+    // doesn't slide out from under her if you keep moving the mouse.
+    private func freezeBambooCursor() {
+        stopTrackingBambooCursor()
+    }
+
+    private func hideBambooCursor() {
+        stopTrackingBambooCursor()
+        if systemCursorHidden {
+            CGDisplayShowCursor(CGMainDisplayID())
+            systemCursorHidden = false
+        }
+        bambooCursorWindow?.orderOut(nil)
+    }
+
     // Walk the window toward the live cursor at a steady pace, re-reading the
     // mouse every frame so she tracks it even as it keeps moving. Once she's on
     // top of it (or a safety timeout fires) she pounces. The model owns the leg
@@ -168,6 +295,9 @@ final class PandaWindowController: NSWindowController {
         wanderTimer?.invalidate()
         wanderTimer = nil
         chaseTimer?.invalidate()
+
+        // The cursor turns into bamboo for the duration of the hunt.
+        showBambooCursor()
 
         let speed: CGFloat = 7.0           // points per frame ≈ 420 pt/s
         let catchRadius: CGFloat = 34      // close enough to lunge
@@ -203,6 +333,12 @@ final class PandaWindowController: NSWindowController {
                 // up to catchRadius short of it.
                 self.lungeOntoCursor(pawRightOfCenter: pawRightOfCenter, pawDropBelowCenter: pawDropBelowCenter)
                 self.viewModel.catchPrey()
+                // Pin the bamboo where she's pouncing, then poof it away as her
+                // paws clamp shut (the pounce's slam lands ≈0.78s later).
+                self.freezeBambooCursor()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+                    self?.hideBambooCursor()
+                }
                 return
             }
 
@@ -401,6 +537,29 @@ final class PandaWindowController: NSWindowController {
     @objc private func menuSize(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let size = PandaSize(rawValue: raw) else { return }
         setSize(size)
+    }
+}
+
+// The bamboo that replaces the cursor while she hunts — the exact same drawn
+// BambooStick she holds and eats, not an emoji, so it matches the rest of the
+// art. Pops in with a little spring and sways gently like a living stalk.
+struct BambooCursorView: View {
+    @State private var appeared = false
+    @State private var sway = false
+
+    var body: some View {
+        BambooStick()
+            .scaleEffect(appeared ? 0.9 : 0.2)
+            .rotationEffect(.degrees(sway ? 6 : -6))
+            .shadow(color: Color.black.opacity(0.28), radius: 2, x: 0, y: 1)
+            .onAppear {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.55)) {
+                    appeared = true
+                }
+                withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
+                    sway = true
+                }
+            }
     }
 }
 
