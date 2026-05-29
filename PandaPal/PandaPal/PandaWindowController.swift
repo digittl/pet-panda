@@ -58,6 +58,10 @@ final class PandaWindowController: NSWindowController {
             self?.savePosition()
         }
 
+        viewModel.onChaseStart = { [weak self] in
+            self?.startMouseChase()
+        }
+
         viewModel.onSizeSelected = { [weak self] size in
             self?.setSize(size)
         }
@@ -127,6 +131,9 @@ final class PandaWindowController: NSWindowController {
         guard let window = window else { return }
         wanderTimer?.invalidate()
         wanderTimer = nil
+        // Grabbing her mid-hunt cancels the chase so the drag wins.
+        chaseTimer?.invalidate()
+        chaseTimer = nil
         let mouse = NSEvent.mouseLocation
         dragOffset = NSPoint(
             x: window.frame.origin.x - mouse.x,
@@ -146,6 +153,116 @@ final class PandaWindowController: NSWindowController {
     }
 
     private var wanderTimer: Timer?
+    private var chaseTimer: Timer?
+
+    // Walk the window toward the live cursor at a steady pace, re-reading the
+    // mouse every frame so she tracks it even as it keeps moving. Once she's on
+    // top of it (or a safety timeout fires) she pounces. The model owns the leg
+    // + pounce animation; this just moves the window and reports facing/catch.
+    private func startMouseChase() {
+        guard let window = window else {
+            viewModel.catchPrey()
+            return
+        }
+
+        wanderTimer?.invalidate()
+        wanderTimer = nil
+        chaseTimer?.invalidate()
+
+        let speed: CGFloat = 7.0           // points per frame ≈ 420 pt/s
+        let catchRadius: CGFloat = 34      // close enough to lunge
+        let maxDuration: TimeInterval = 9.0
+        let startTime = Date()
+
+        // She grabs with her paws, which sit below — and slightly right of —
+        // her body's center. Aim that paw point, not the window center, at the
+        // cursor so the cursor ends up right where her little paws clamp shut.
+        let pawDropBelowCenter: CGFloat = 26 * viewModel.size.multiplier
+        let pawRightOfCenter: CGFloat = 8 * viewModel.size.multiplier
+
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self, weak window] timer in
+            guard let self = self, let window = window else {
+                timer.invalidate()
+                return
+            }
+
+            let mouse = NSEvent.mouseLocation
+            let frame = window.frame
+            // Screen y is up, so "below center" is midY minus the drop.
+            let pawX = frame.midX + pawRightOfCenter
+            let pawY = frame.midY - pawDropBelowCenter
+            let dx = mouse.x - pawX
+            let dy = mouse.y - pawY
+            let dist = hypot(dx, dy)
+
+            if dist <= catchRadius || Date().timeIntervalSince(startTime) > maxDuration {
+                timer.invalidate()
+                self.chaseTimer = nil
+                // Final lunge: close the remaining gap so the paw point lands
+                // exactly on the cursor as she pounces, rather than stopping
+                // up to catchRadius short of it.
+                self.lungeOntoCursor(pawRightOfCenter: pawRightOfCenter, pawDropBelowCenter: pawDropBelowCenter)
+                self.viewModel.catchPrey()
+                return
+            }
+
+            // Face the way she's running.
+            self.viewModel.updateChaseFacing(dx >= 0 ? 1 : -1)
+
+            // Step toward the cursor, clamped to the union of all screens so she
+            // can chase across monitors without walking off into the void.
+            let step = min(speed, dist)
+            let bounds = self.screensBounds()
+            let nx = min(max(frame.origin.x + dx / dist * step, bounds.minX), bounds.maxX - frame.width)
+            let ny = min(max(frame.origin.y + dy / dist * step, bounds.minY), bounds.maxY - frame.height)
+            window.setFrameOrigin(NSPoint(x: nx, y: ny))
+        }
+        chaseTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func screensBounds() -> NSRect {
+        return NSScreen.screens.reduce(NSRect.null) { $0.union($1.frame) }
+    }
+
+    // Slide the window over the crouch/wind-up so the paw point ends exactly on
+    // the cursor at the moment of the slam (the pounce's leap is at ~0.5s, slam
+    // at ~0.78s — this glide finishes well before then).
+    private func lungeOntoCursor(pawRightOfCenter: CGFloat, pawDropBelowCenter: CGFloat) {
+        guard let window = window else { return }
+
+        let mouse = NSEvent.mouseLocation
+        let frame = window.frame
+        let target = NSPoint(
+            x: mouse.x - frame.width / 2 - pawRightOfCenter,
+            y: mouse.y - frame.height / 2 + pawDropBelowCenter
+        )
+
+        let start = frame.origin
+        let duration: TimeInterval = 0.45
+        let startTime = Date()
+
+        chaseTimer?.invalidate()
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self, weak window] timer in
+            guard let self = self, let window = window else {
+                timer.invalidate()
+                return
+            }
+            let t = min(1.0, Date().timeIntervalSince(startTime) / duration)
+            let eased = t * t * (3 - 2 * t)
+            window.setFrameOrigin(NSPoint(
+                x: start.x + (target.x - start.x) * CGFloat(eased),
+                y: start.y + (target.y - start.y) * CGFloat(eased)
+            ))
+            if t >= 1.0 {
+                timer.invalidate()
+                self.chaseTimer = nil
+                self.savePosition()
+            }
+        }
+        chaseTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
 
     private func wander(dx: CGFloat, dy: CGFloat, duration: TimeInterval) {
         guard let window = window, let screen = window.screen ?? NSScreen.main else { return }
@@ -215,6 +332,10 @@ final class PandaWindowController: NSWindowController {
         walk.target = self
         menu.addItem(walk)
 
+        let chase = NSMenuItem(title: "Chase", action: #selector(menuChase), keyEquivalent: "")
+        chase.target = self
+        menu.addItem(chase)
+
         let feed = NSMenuItem(title: "Feed", action: #selector(menuFeed), keyEquivalent: "")
         feed.target = self
         menu.addItem(feed)
@@ -267,6 +388,10 @@ final class PandaWindowController: NSWindowController {
 
     @objc private func menuWalk() {
         viewModel.forceWander()
+    }
+
+    @objc private func menuChase() {
+        viewModel.chaseNow()
     }
 
     @objc private func menuFeed() {
