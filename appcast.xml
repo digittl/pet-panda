@@ -3,7 +3,20 @@
     <channel>
         <title>PandaPal</title>
         <link>https://digittl.github.io/pet-panda/appcast.xml</link>
-        <description>Most recent PandaPal release. Placeholder — populated by the release workflow on each new tag.</description>
+        <description>Most recent PandaPal release.</description>
         <language>en</language>
+        <item>
+            <title>Version 1.10.0</title>
+            <link>https://github.com/digittl/pet-panda/releases/tag/v1.10.0</link>
+            <sparkle:version>1.10.0</sparkle:version>
+            <sparkle:shortVersionString>1.10.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <pubDate>Fri, 29 May 2026 00:48:23 +0000</pubDate>
+            <enclosure
+                url="https://github.com/digittl/pet-panda/releases/download/v1.10.0/PandaPal.zip"
+                sparkle:edSignature="MsovnuPlrIr74rMef2NnK6qJ5YSo75FePy3n0ppMgt6CA1v5e730UGBimvytaQOC0B9XcPei8MSp7PZ4dVaSCg=="
+                length="1854653"
+                type="application/octet-stream" />
+        </item>
     </channel>
 </rss>
