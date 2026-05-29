@@ -126,12 +126,26 @@ final class PandaViewModel: ObservableObject {
     var onDragTrackMouse: (() -> Void)?
     var onDragEnded: (() -> Void)?
     var onSizeSelected: ((PandaSize) -> Void)?
+    // The controller owns mouse + window access, so it drives the chase loop:
+    // it walks the window toward the live cursor and calls back into the model
+    // (updateChaseFacing / catchPrey) for the matching leg + pounce animation.
+    var onChaseStart: (() -> Void)?
 
     private var idleTimer: Timer?
     private var wanderTimer: Timer?
     private var activeTimers: [Timer] = []
     private var dragFlailTimer: Timer?
+    private var chaseWalkTimer: Timer?
     private var isBusy = false
+    // Timestamp of her last self-initiated cursor hunt, used to keep autonomous
+    // chases to at most one every 45 minutes. (Menu "Chase" ignores this.)
+    private var lastAutoChase: Date?
+    private let autoChaseCooldown: TimeInterval = 45 * 60
+
+    // True while she's resting on the cushion (sit / relax / nap). The cushion
+    // poses run on dispatch chains rather than cancellable timers, so they check
+    // this before each staged step and bail if she's been woken early.
+    private var isResting = false
 
     private func registerTimer(_ timer: Timer) {
         activeTimers.append(timer)
@@ -158,6 +172,13 @@ final class PandaViewModel: ObservableObject {
     // MARK: - Public interactions
 
     func pat() {
+        // A tap while she's resting on the cushion startles her awake instead
+        // of running a normal pat reaction.
+        if isResting || sitting || cushionVisible {
+            wakeStartled()
+            return
+        }
+
         guard !isBusy else {
             // Quick extra squish for repeated taps
             quickSquish()
@@ -218,6 +239,10 @@ final class PandaViewModel: ObservableObject {
         resetTransientState()
         isBusy = true
         idleTikTokDance()
+    }
+
+    func chaseNow() {
+        chaseMouse()
     }
 
     func requestSize(_ size: PandaSize) {
@@ -343,12 +368,34 @@ final class PandaViewModel: ObservableObject {
 
     private func scheduleNextWander(initial: Bool = false) {
         wanderTimer?.invalidate()
-        let delay = initial ? Double.random(in: 1.5...3.0) : Double.random(in: 8...16)
+        // Roam more often than the original 8...16s, but not constantly.
+        let delay = initial ? Double.random(in: 1.5...3.0) : Double.random(in: 6...12)
         let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
-            self?.wander()
+            self?.roam()
         }
         RunLoop.main.add(timer, forMode: .common)
         wanderTimer = timer
+    }
+
+    // Decide what a scheduled roam does: almost always a casual stroll, but
+    // every once in a while she locks onto the cursor and hunts it down.
+    private func roam() {
+        // Never cut a cushion session short — let her finish resting and try
+        // again later. (Explicit menu Walk/Chase can still interrupt.)
+        if sitting || cushionVisible {
+            scheduleNextWander()
+            return
+        }
+
+        // Only hunt if the cooldown has elapsed, and even then only some of the
+        // time so it doesn't fire like clockwork right on the hour.
+        let cooldownElapsed = lastAutoChase.map { Date().timeIntervalSince($0) >= autoChaseCooldown } ?? true
+        if onChaseStart != nil && cooldownElapsed && Int.random(in: 0..<5) == 0 {
+            lastAutoChase = Date()
+            chaseMouse()
+        } else {
+            wander()
+        }
     }
 
     func forceWander() {
@@ -360,6 +407,8 @@ final class PandaViewModel: ObservableObject {
         idleTimer = nil
         wanderTimer?.invalidate()
         wanderTimer = nil
+        chaseWalkTimer?.invalidate()
+        chaseWalkTimer = nil
         stopDragFlail()
         cancelActiveTimers()
     }
@@ -404,6 +453,7 @@ final class PandaViewModel: ObservableObject {
             pawsInLap = false
             greetingWave = false
         }
+        isResting = false
     }
 
     private func playRandomIdle() {
@@ -441,6 +491,13 @@ final class PandaViewModel: ObservableObject {
         let duration: TimeInterval = 5.4
         let startedAt = Date()
         var sparkleBeat = 0
+
+        // She never dances on the cushion — clear any lingering rest pose first.
+        if sitting || cushionVisible || pawsInLap {
+            sitting = false
+            cushionVisible = false
+            pawsInLap = false
+        }
 
         withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
             mouthShape = .grin
@@ -581,6 +638,204 @@ final class PandaViewModel: ObservableObject {
                 self.walkFootLift = 0
                 self.squashScale = 1.0
                 self.shadowScale = 1.0
+            }
+            self.finishAnimation()
+        }
+    }
+
+    // MARK: - Chase the cursor
+
+    private func chaseMouse() {
+        // Don't interrupt a drag — try again later.
+        if isDragging {
+            scheduleNextWander()
+            return
+        }
+
+        cancelTimers()
+        resetTransientState()
+        isBusy = true
+
+        guard let onChaseStart = onChaseStart else {
+            finishAnimation()
+            return
+        }
+
+        // Lock on: wide eyes, determined grin, low pounce-ready crouch.
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            eyesWide = true
+            mouthShape = .grin
+            bodyOffsetY = 2
+            shadowScale = 1.08
+        }
+
+        startChaseWalkCycle()
+        onChaseStart()
+    }
+
+    private func startChaseWalkCycle() {
+        chaseWalkTimer?.invalidate()
+
+        var step = 0
+
+        // Faster, more urgent stride than the casual wander bob.
+        let timer = Timer(timeInterval: 0.12, repeats: true) { [weak self] timer in
+            guard let self = self else {
+                timer.invalidate()
+                return
+            }
+            step += 1
+            let isEvenStep = step % 2 == 0
+            withAnimation(.spring(response: 0.16, dampingFraction: 0.86)) {
+                self.leadingPawSide = isEvenStep ? -1 : 1
+                self.walkFootLift = isEvenStep ? 7 : 5
+                self.walkStride = isEvenStep ? 6 : -6
+                self.bodyOffsetY = isEvenStep ? -4 : -1
+                self.squashScale = isEvenStep ? 1.02 : 0.98
+                self.shadowScale = isEvenStep ? 0.88 : 1.04
+                self.leftArmWave = isEvenStep ? 18 : -16
+                self.rightArmWave = isEvenStep ? -18 : 16
+            }
+        }
+        chaseWalkTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    // Called by the controller each frame so she always faces where she's headed.
+    func updateChaseFacing(_ direction: CGFloat) {
+        guard direction != 0, direction != walkDirection else { return }
+        withAnimation(.easeInOut(duration: 0.18)) {
+            walkDirection = direction
+            headTilt = Double(direction * 4)
+            lookDirection = direction * 7
+        }
+    }
+
+    // Called by the controller once she's on top of the cursor — the pounce.
+    func catchPrey() {
+        chaseWalkTimer?.invalidate()
+        chaseWalkTimer = nil
+        playPounce()
+    }
+
+    private func playPounce() {
+        // 1. Crouch low and coil up — eyes locked on, paws planted.
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.62)) {
+            walkStride = 0
+            walkFootLift = 0
+            leftArmRaised = false
+            rightArmRaised = false
+            leftArmWave = 0
+            rightArmWave = 0
+            squashScale = 0.78
+            bodyOffsetY = 12
+            eyesWide = true
+            mouthShape = .grin
+            lookDirection = 0
+            lookVertical = 4
+            headTilt = 0
+        }
+
+        // 2. Wind-up: the little cat butt-wiggle right before the leap.
+        let wiggles: [(Double, Double, CGFloat)] = [
+            (0.14, 5, 3),
+            (0.26, -5, -3),
+            (0.38, 4, 2)
+        ]
+        for (delay, roll, ears) in wiggles {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                withAnimation(.easeInOut(duration: 0.1)) {
+                    self.bodyRoll = roll
+                    self.earWiggle = ears
+                    self.squashScale = 0.76
+                }
+            }
+        }
+
+        // 3. LEAP — explode up and forward, arms thrown wide to grab.
+        // Kept within the same vertical envelope as reactJump so her head and
+        // raised paws don't clip the top of the window during the leap.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.5)) {
+                self.bodyRoll = 0
+                self.earWiggle = 0
+                self.bodyOffsetY = -26
+                self.squashScale = 1.1
+                self.shadowScale = 0.5
+                self.leftArmRaised = true
+                self.rightArmRaised = true
+                self.leftArmWave = 48
+                self.rightArmWave = -48
+                self.mouthShape = .open
+                self.lookVertical = -2
+            }
+        }
+
+        // 4. SLAM — crash down onto it, arms clamp shut, impact dust flies.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.78) {
+            withAnimation(.spring(response: 0.14, dampingFraction: 0.52)) {
+                self.bodyOffsetY = 14
+                self.squashScale = 0.72
+                self.shadowScale = 1.22
+                self.leftArmWave = 4
+                self.rightArmWave = -4
+                self.mouthShape = .grin
+                self.eyesClosed = true
+                self.lookVertical = 6
+            }
+            self.spawnParticle(.star, at: CGSize(width: 0, height: -8))
+            self.spawnParticle(.sparkle, at: CGSize(width: -22, height: 6))
+            self.spawnParticle(.sparkle, at: CGSize(width: 22, height: 6))
+        }
+
+        // 5. Rebound and peek down into her clasped paws — did she get it?
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                self.bodyOffsetY = 4
+                self.squashScale = 1.04
+                self.shadowScale = 1.06
+                self.eyesClosed = false
+                self.eyesWide = true
+                self.mouthShape = .ohh
+                self.headTilt = -6
+                self.lookVertical = 8
+            }
+        }
+
+        // 6. GOT IT! Sit up triumphant — heart eyes, blush, a shower of hearts.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.55)) {
+                self.bodyOffsetY = -8
+                self.squashScale = 1.08
+                self.shadowScale = 0.92
+                self.eyesWide = false
+                self.eyesHeart = true
+                self.blushVisible = true
+                self.mouthShape = .grin
+                self.headTilt = 0
+                self.lookVertical = 0
+                self.leftArmWave = 0
+                self.rightArmWave = 0
+            }
+            for i in 0..<3 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.12) {
+                    self.spawnParticle(.heart, at: CGSize(width: CGFloat.random(in: -24...24), height: -34))
+                }
+            }
+            self.spawnParticle(.star, at: CGSize(width: 0, height: -44))
+        }
+
+        // 7. Settle back to neutral and resume normal scheduling.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.3) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                self.bodyOffsetY = 0
+                self.squashScale = 1.0
+                self.shadowScale = 1.0
+                self.leftArmRaised = false
+                self.rightArmRaised = false
+                self.eyesHeart = false
+                self.blushVisible = false
+                self.mouthShape = .smile
             }
             self.finishAnimation()
         }
@@ -940,6 +1195,7 @@ final class PandaViewModel: ObservableObject {
 
     private func idleSit() {
         // Settle into zen lotus pose
+        isResting = true
         withAnimation(.spring(response: 0.7, dampingFraction: 0.75)) {
             cushionVisible = true
             sitting = true
@@ -949,37 +1205,42 @@ final class PandaViewModel: ObservableObject {
             mouthShape = .smile
         }
 
-        let sitDuration = Double.random(in: 18...28)
+        let sitDuration = Double.random(in: 30...46)
 
         // Occasional gentle head turns while sitting — zen contemplation
         let look1 = sitDuration * 0.25
         let look2 = sitDuration * 0.5
         let look3 = sitDuration * 0.75
         DispatchQueue.main.asyncAfter(deadline: .now() + look1) {
+            guard self.isResting else { return }
             withAnimation(.easeInOut(duration: 1.2)) {
                 self.headTilt = -5
                 self.lookVertical = -3
                 self.eyesClosed = true
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                guard self.isResting else { return }
                 withAnimation(.easeInOut(duration: 0.6)) {
                     self.eyesClosed = false
                 }
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + look2) {
+            guard self.isResting else { return }
             withAnimation(.easeInOut(duration: 1.2)) {
                 self.headTilt = 5
                 self.lookVertical = 3
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + look3) {
+            guard self.isResting else { return }
             withAnimation(.easeInOut(duration: 1.2)) {
                 self.headTilt = 0
                 self.lookVertical = 0
                 self.eyesClosed = true
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                guard self.isResting else { return }
                 withAnimation(.easeInOut(duration: 0.6)) {
                     self.eyesClosed = false
                 }
@@ -988,6 +1249,8 @@ final class PandaViewModel: ObservableObject {
 
         // Stand back up
         DispatchQueue.main.asyncAfter(deadline: .now() + sitDuration) {
+            guard self.isResting else { return }
+            self.isResting = false
             withAnimation(.spring(response: 0.6, dampingFraction: 0.75)) {
                 self.sitting = false
                 self.cushionVisible = false
@@ -1004,6 +1267,7 @@ final class PandaViewModel: ObservableObject {
 
     private func idleNapOnCushion() {
         // Settle down, fold legs, eyes shut almost immediately.
+        isResting = true
         withAnimation(.spring(response: 0.7, dampingFraction: 0.8)) {
             cushionVisible = true
             sitting = true
@@ -1016,7 +1280,7 @@ final class PandaViewModel: ObservableObject {
         }
 
         // Long, slow breathing with occasional 💤
-        let napBreaths = Int.random(in: 70...110)
+        let napBreaths = Int.random(in: 30...46)
         var breaths = 0
         let timer = Timer(timeInterval: 2.7, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
@@ -1068,6 +1332,7 @@ final class PandaViewModel: ObservableObject {
                     }
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
+                    self.isResting = false
                     withAnimation(.spring(response: 0.6, dampingFraction: 0.75)) {
                         self.cushionVisible = false
                         self.bodyOffsetY = 0
@@ -1083,6 +1348,7 @@ final class PandaViewModel: ObservableObject {
 
     private func idleRelax() {
         // Sit zen, slow blush + occasional heart
+        isResting = true
         withAnimation(.spring(response: 0.7, dampingFraction: 0.75)) {
             cushionVisible = true
             sitting = true
@@ -1094,16 +1360,19 @@ final class PandaViewModel: ObservableObject {
             blushVisible = true
         }
 
-        let relaxDuration = Double.random(in: 14...20)
+        let relaxDuration = Double.random(in: 24...34)
 
         // Drift the head gently
         DispatchQueue.main.asyncAfter(deadline: .now() + relaxDuration * 0.25) {
+            guard self.isResting else { return }
             withAnimation(.easeInOut(duration: 1.5)) { self.headTilt = 4 }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + relaxDuration * 0.5) {
+            guard self.isResting else { return }
             withAnimation(.easeInOut(duration: 1.5)) { self.headTilt = -4 }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + relaxDuration * 0.75) {
+            guard self.isResting else { return }
             withAnimation(.easeInOut(duration: 1.5)) { self.headTilt = 2 }
         }
 
@@ -1111,11 +1380,14 @@ final class PandaViewModel: ObservableObject {
         let beats = 4
         for i in 0..<beats {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0 + Double(i) * (relaxDuration / Double(beats))) {
+                guard self.isResting else { return }
                 self.spawnParticle(.heart, at: CGSize(width: CGFloat.random(in: -16...16), height: -28))
             }
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + relaxDuration) {
+            guard self.isResting else { return }
+            self.isResting = false
             withAnimation(.spring(response: 0.6, dampingFraction: 0.75)) {
                 self.sitting = false
                 self.cushionVisible = false
@@ -1124,6 +1396,73 @@ final class PandaViewModel: ObservableObject {
                 self.squashScale = 1.0
                 self.headTilt = 0
                 self.blushVisible = false
+            }
+            self.finishAnimation()
+        }
+    }
+
+    // Tapped awake mid-rest: she startles, the cushion poofs away, then she
+    // shakes it off and gives a sleepy little smile.
+    private func wakeStartled() {
+        isResting = false
+        cancelTimers()
+        isBusy = true
+
+        // Startle — eyes snap open, a surprised hop up off the cushion.
+        withAnimation(.spring(response: 0.18, dampingFraction: 0.42)) {
+            eyesClosed = false
+            eyesWide = true
+            mouthShape = .ohh
+            sitting = false
+            pawsInLap = false
+            bodyOffsetY = -16
+            squashScale = 1.12
+            headTilt = 0
+            lookVertical = 0
+            blushVisible = false
+        }
+        spawnParticle(.sparkle, at: CGSize(width: -20, height: -30))
+        spawnParticle(.sparkle, at: CGSize(width: 20, height: -32))
+
+        // Cushion poofs out from under her.
+        withAnimation(.easeOut(duration: 0.3)) {
+            cushionVisible = false
+        }
+
+        // Land back down.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.6)) {
+                self.bodyOffsetY = 0
+                self.squashScale = 1.0
+            }
+        }
+
+        // A quick "huh?" head shake to shake off the sleep.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.easeInOut(duration: 0.16)) { self.headTilt = -9 }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.68) {
+            withAnimation(.easeInOut(duration: 0.16)) { self.headTilt = 9 }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.86) {
+            withAnimation(.easeInOut(duration: 0.2)) { self.headTilt = 0 }
+        }
+
+        // Sleepy-but-happy: soften the eyes, blush, little heart.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                self.eyesWide = false
+                self.mouthShape = .grin
+                self.blushVisible = true
+            }
+            self.spawnParticle(.heart, at: CGSize(width: 0, height: -34))
+        }
+
+        // Settle back to neutral.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.7) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                self.blushVisible = false
+                self.mouthShape = .smile
             }
             self.finishAnimation()
         }
