@@ -14,6 +14,7 @@
 		A1000005229F0001 /* PandaContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000015229F0001 /* PandaContainerView.swift */; };
 		A1000006229F0001 /* PandaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000016229F0001 /* PandaView.swift */; };
 		A1000007229F0001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000018229F0001 /* Assets.xcassets */; };
+		S1000003229F0001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = S1000002229F0001 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,6 +34,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				S1000003229F0001 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -86,6 +88,9 @@
 			dependencies = (
 			);
 			name = PandaPal;
+			packageProductDependencies = (
+				S1000002229F0001 /* Sparkle */,
+			);
 			productName = PandaPal;
 			productReference = A1000020229F0001 /* PandaPal.app */;
 			productType = "com.apple.product-type.application";
@@ -114,6 +119,9 @@
 				Base,
 			);
 			mainGroup = A1000040229F0001;
+			packageReferences = (
+				S1000001229F0001 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			productRefGroup = A1000042229F0001 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -339,6 +347,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		S1000001229F0001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		S1000002229F0001 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = S1000001229F0001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 	};
 	rootObject = A1000070229F0001 /* Project object */;

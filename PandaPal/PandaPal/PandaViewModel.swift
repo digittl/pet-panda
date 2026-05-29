@@ -30,6 +30,18 @@ enum PandaSize: String, CaseIterable {
     }
 }
 
+enum PandaGender: String, CaseIterable {
+    case girl
+    case boy
+
+    var label: String {
+        switch self {
+        case .girl: return "Girl"
+        case .boy: return "Boy"
+        }
+    }
+}
+
 enum MouthShape {
     case smile
     case open
@@ -100,6 +112,7 @@ final class PandaViewModel: ObservableObject {
     @Published var isDragging: Bool = false
     @Published var dragSway: Double = 0
     @Published var size: PandaSize = .medium
+    @Published var gender: PandaGender = .girl
     @Published var sitting: Bool = false
     @Published var cushionVisible: Bool = false
     @Published var pawsInLap: Bool = false

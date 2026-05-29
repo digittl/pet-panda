@@ -143,10 +143,12 @@ struct PandaView: View {
             ear(side: -1)
             ear(side: 1)
 
-            // Cute pink bow on top of head (always-on accessory)
-            PandaBow()
-                .offset(x: 15, y: -49)
-                .rotationEffect(.degrees(-10))
+            // Girl pandas wear a pink bow; boy pandas go bare-eared.
+            if viewModel.gender == .girl {
+                PandaBow()
+                    .offset(x: 15, y: -49)
+                    .rotationEffect(.degrees(-10))
+            }
 
             // Head shape — multi-layered for high-def depth.
             Circle()
