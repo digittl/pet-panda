@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Wave Hello", action: #selector(waveHello), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Dance", action: #selector(danceNow), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Walk Now", action: #selector(walkNow), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Chase Cursor", action: #selector(chaseNow), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Feed Bamboo", action: #selector(feedBamboo), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Reset Position", action: #selector(resetPosition), keyEquivalent: "r"))
 
@@ -188,6 +189,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func walkNow() {
         pandaWindowController?.viewModel.forceWander()
+    }
+
+    @objc private func chaseNow() {
+        pandaWindowController?.viewModel.chaseNow()
     }
 
     @objc private func feedBamboo() {
