@@ -4,6 +4,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build PandaPal.app
@@ -15,14 +18,28 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
 
+      - name: Resolve version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          # Strip leading v if present (v1.2.3 → 1.2.3)
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Building version $VERSION (tag $TAG)"
+
       - name: Build
         working-directory: PandaPal
+        env:
+          PANDA_VERSION: ${{ steps.version.outputs.version }}
         run: |
           xcodebuild \
             -project PandaPal.xcodeproj \
             -scheme PandaPal \
             -configuration Release \
             -derivedDataPath build \
+            MARKETING_VERSION="$PANDA_VERSION" \
+            CURRENT_PROJECT_VERSION="$PANDA_VERSION" \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -37,23 +54,21 @@ jobs:
 
           1. Drag PandaPal.app into your Applications folder.
           2. The first time you open it, macOS will say it can't be opened because
-             it isn't notarized (this app is built without a paid Apple Developer
-             account). You have two options:
-
-             a) RECOMMENDED: Right-click PandaPal.app → Open → click "Open" in
-                the dialog. macOS remembers your choice — after that you can
-                launch it normally forever.
-
-             b) ALTERNATIVE: open Terminal and run:
+             it isn't notarized. Right-click → Open NO LONGER bypasses this on
+             current macOS, so you have to strip the quarantine flag from
+             Terminal:
 
                 xattr -dr com.apple.quarantine /Applications/PandaPal.app
 
-                then double-click PandaPal.app as usual.
+             Then double-click PandaPal.app as usual.
 
           3. A paw print icon will appear in your menu bar with controls
-             (Show/Hide, Reset Position, Size, Quit). The panda lives on
-             your screen — click to pat, drag to move, and he wanders on
-             his own every few seconds.
+             (Show/Hide, Reset Position, Size, Gender, Quit). The panda lives
+             on your screen — click to pat, drag to move, and she wanders on
+             her own every few seconds.
+
+          4. PandaPal checks for updates automatically once a day. You can also
+             trigger a check from the menu bar via "Check for Updates…".
 
           Enjoy your panda!
           EOF
@@ -65,10 +80,8 @@ jobs:
           mkdir -p zip-staging
           cp -R "$APP_PATH" zip-staging/
           cp INSTALL.txt zip-staging/
-          ditto -c -k --keepParent zip-staging PandaPal.zip
-          # The above gives a wrapping folder — repack cleanly so the zip
-          # extracts PandaPal.app + INSTALL.txt directly.
-          rm PandaPal.zip
+          # Sparkle expects the zip to contain PandaPal.app at the top level
+          # (alongside INSTALL.txt). ditto preserves Mac metadata properly.
           (cd zip-staging && ditto -c -k --sequesterRsrc --keepParent PandaPal.app ../PandaPal.zip)
           (cd zip-staging && zip -j ../PandaPal.zip INSTALL.txt)
 
@@ -86,6 +99,80 @@ jobs:
             -ov \
             -format UDZO \
             PandaPal.dmg
+
+      - name: Sign zip with Sparkle EdDSA key
+        id: sign
+        working-directory: PandaPal
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          # Pull the same Sparkle release we link against so the signing tool
+          # matches the framework version inside the app.
+          curl -sL -o sparkle.tar.xz https://github.com/sparkle-project/Sparkle/releases/download/2.6.4/Sparkle-2.6.4.tar.xz
+          mkdir -p sparkle && tar -xJf sparkle.tar.xz -C sparkle
+          SIGN_UPDATE="$(find sparkle -name sign_update -type f | head -n 1)"
+          chmod +x "$SIGN_UPDATE"
+
+          echo "$SPARKLE_ED_PRIVATE_KEY" > /tmp/sparkle_priv.key
+          SIG_OUTPUT="$("$SIGN_UPDATE" -f /tmp/sparkle_priv.key PandaPal.zip)"
+          rm -f /tmp/sparkle_priv.key
+
+          # sign_update prints `sparkle:edSignature="..." length="..."`
+          ED_SIG="$(echo "$SIG_OUTPUT" | sed -E 's/.*sparkle:edSignature="([^"]+)".*/\1/')"
+          LENGTH="$(echo "$SIG_OUTPUT" | sed -E 's/.*length="([^"]+)".*/\1/')"
+
+          {
+            echo "ed_signature=$ED_SIG"
+            echo "length=$LENGTH"
+          } >> "$GITHUB_OUTPUT"
+          echo "Signed PandaPal.zip — length=$LENGTH"
+
+      - name: Generate appcast.xml
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+          ED_SIG: ${{ steps.sign.outputs.ed_signature }}
+          LENGTH: ${{ steps.sign.outputs.length }}
+        run: |
+          mkdir -p appcast-out
+          PUBDATE="$(date -u +'%a, %d %b %Y %H:%M:%S +0000')"
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/PandaPal.zip"
+          RELEASE_PAGE="https://github.com/${{ github.repository }}/releases/tag/${TAG}"
+
+          cat > appcast-out/appcast.xml <<EOF
+          <?xml version="1.0" standalone="yes"?>
+          <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+              <channel>
+                  <title>PandaPal</title>
+                  <link>https://digittl.github.io/pet-panda/appcast.xml</link>
+                  <description>Most recent PandaPal release.</description>
+                  <language>en</language>
+                  <item>
+                      <title>Version ${VERSION}</title>
+                      <link>${RELEASE_PAGE}</link>
+                      <sparkle:version>${VERSION}</sparkle:version>
+                      <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+                      <pubDate>${PUBDATE}</pubDate>
+                      <enclosure
+                          url="${RELEASE_URL}"
+                          sparkle:edSignature="${ED_SIG}"
+                          length="${LENGTH}"
+                          type="application/octet-stream" />
+                  </item>
+              </channel>
+          </rss>
+          EOF
+          cat appcast-out/appcast.xml
+
+      - name: Publish appcast to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./appcast-out
+          publish_branch: gh-pages
+          keep_files: false
+          commit_message: "appcast: ${{ steps.version.outputs.tag }}"
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2

@@ -1,9 +1,15 @@
 import AppKit
+import Sparkle
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var pandaWindowController: PandaWindowController?
+    private let updaterController = SPUStandardUpdaterController(
+        startingUpdater: true,
+        updaterDelegate: nil,
+        userDriverDelegate: nil
+    )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -69,18 +75,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sizeItem.submenu = sizeMenu
         menu.addItem(sizeItem)
 
+        let genderItem = NSMenuItem(title: "Gender", action: nil, keyEquivalent: "")
+        let genderMenu = NSMenu()
+        for gender in PandaGender.allCases {
+            let item = NSMenuItem(title: gender.label, action: #selector(setGender(_:)), keyEquivalent: "")
+            item.representedObject = gender.rawValue
+            genderMenu.addItem(item)
+        }
+        genderItem.submenu = genderMenu
+        menu.addItem(genderItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let checkForUpdates = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+            keyEquivalent: ""
+        )
+        checkForUpdates.target = updaterController
+        menu.addItem(checkForUpdates)
+
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q"))
 
-        for item in menu.items {
+        for item in menu.items where item.target == nil && item.action != nil {
             item.target = self
         }
         for item in sizeMenu.items {
             item.target = self
         }
+        for item in genderMenu.items {
+            item.target = self
+        }
 
         statusItem.menu = menu
         updateSizeMenuState(sizeMenu)
+        updateGenderMenuState(genderMenu)
+    }
+
+    private func updateGenderMenuState(_ genderMenu: NSMenu) {
+        let current = pandaWindowController?.viewModel.gender.rawValue
+            ?? UserDefaults.standard.string(forKey: "PandaPal.gender")
+            ?? PandaGender.girl.rawValue
+        for item in genderMenu.items {
+            if let raw = item.representedObject as? String {
+                item.state = raw == current ? .on : .off
+            }
+        }
+    }
+
+    @objc private func setGender(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let gender = PandaGender(rawValue: raw) else { return }
+        pandaWindowController?.setGender(gender)
+        if let genderMenu = sender.menu {
+            updateGenderMenuState(genderMenu)
+        }
     }
 
     private func updateSizeMenuState(_ sizeMenu: NSMenu) {

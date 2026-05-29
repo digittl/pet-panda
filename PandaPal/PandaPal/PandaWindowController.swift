@@ -5,6 +5,7 @@ final class PandaWindowController: NSWindowController {
     private let baseSize = NSSize(width: 180, height: 200)
     private let positionKey = "PandaPal.lastPosition"
     private let sizeKey = "PandaPal.size"
+    private let genderKey = "PandaPal.gender"
     let viewModel = PandaViewModel()
 
     private var pandaSize: NSSize {
@@ -33,6 +34,8 @@ final class PandaWindowController: NSWindowController {
 
         self.init(window: panel)
         viewModel.size = storedSize
+        let storedGender = UserDefaults.standard.string(forKey: "PandaPal.gender").flatMap(PandaGender.init(rawValue:)) ?? .girl
+        viewModel.gender = storedGender
 
         let hostingView = PandaHostingView(rootView: PandaContainerView(viewModel: viewModel))
         hostingView.frame = panel.contentView!.bounds
@@ -71,6 +74,11 @@ final class PandaWindowController: NSWindowController {
             name: NSWindow.didMoveNotification,
             object: panel
         )
+    }
+
+    func setGender(_ gender: PandaGender) {
+        viewModel.gender = gender
+        UserDefaults.standard.set(gender.rawValue, forKey: genderKey)
     }
 
     func setSize(_ size: PandaSize) {
@@ -225,7 +233,24 @@ final class PandaWindowController: NSWindowController {
         sizeItem.submenu = sizeMenu
         menu.addItem(sizeItem)
 
+        let genderItem = NSMenuItem(title: "Gender", action: nil, keyEquivalent: "")
+        let genderMenu = NSMenu()
+        for gender in PandaGender.allCases {
+            let item = NSMenuItem(title: gender.label, action: #selector(menuGender(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = gender.rawValue
+            item.state = viewModel.gender == gender ? .on : .off
+            genderMenu.addItem(item)
+        }
+        genderItem.submenu = genderMenu
+        menu.addItem(genderItem)
+
         NSMenu.popUpContextMenu(menu, with: event, for: view)
+    }
+
+    @objc private func menuGender(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let gender = PandaGender(rawValue: raw) else { return }
+        setGender(gender)
     }
 
     @objc private func menuPet() {
