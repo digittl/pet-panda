@@ -1,0 +1,9 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>PandaPal</title>
+        <link>https://digittl.github.io/pet-panda/appcast.xml</link>
+        <description>Most recent PandaPal release. Placeholder — populated by the release workflow on each new tag.</description>
+        <language>en</language>
+    </channel>
+</rss>
