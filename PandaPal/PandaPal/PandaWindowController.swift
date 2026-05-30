@@ -20,6 +20,7 @@ final class PandaWindowController: NSWindowController {
     private let positionKey = "PandaPal.lastPosition"
     private let sizeKey = "PandaPal.size"
     private let genderKey = "PandaPal.gender"
+    private let kindKey = "PandaPal.petKind"
     let viewModel = PandaViewModel()
 
     private var pandaSize: NSSize {
@@ -50,6 +51,8 @@ final class PandaWindowController: NSWindowController {
         viewModel.size = storedSize
         let storedGender = UserDefaults.standard.string(forKey: "PandaPal.gender").flatMap(PandaGender.init(rawValue:)) ?? .girl
         viewModel.gender = storedGender
+        let storedKind = UserDefaults.standard.string(forKey: "PandaPal.petKind").flatMap(PetKind.init(rawValue:)) ?? .panda
+        viewModel.kind = storedKind
 
         let hostingView = PandaHostingView(rootView: PandaContainerView(viewModel: viewModel))
         hostingView.frame = panel.contentView!.bounds
@@ -97,6 +100,11 @@ final class PandaWindowController: NSWindowController {
     func setGender(_ gender: PandaGender) {
         viewModel.gender = gender
         UserDefaults.standard.set(gender.rawValue, forKey: genderKey)
+    }
+
+    func setPetKind(_ kind: PetKind) {
+        viewModel.kind = kind
+        UserDefaults.standard.set(kind.rawValue, forKey: kindKey)
     }
 
     func setSize(_ size: PandaSize) {
