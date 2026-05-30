@@ -30,6 +30,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        // If we quit mid-hunt the system cursor is still hidden — restore it so
+        // the user isn't left without a pointer after the app exits.
+        pandaWindowController?.restoreSystemCursorIfHidden()
+    }
+
     private func closeStrayWindows() {
         for window in NSApp.windows {
             if window === pandaWindowController?.window {

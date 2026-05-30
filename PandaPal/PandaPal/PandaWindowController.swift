@@ -275,11 +275,22 @@ final class PandaWindowController: NSWindowController {
 
     private func hideBambooCursor() {
         stopTrackingBambooCursor()
-        if systemCursorHidden {
-            CGDisplayShowCursor(CGMainDisplayID())
-            systemCursorHidden = false
-        }
+        restoreSystemCursorIfHidden()
         bambooCursorWindow?.orderOut(nil)
+    }
+
+    // Safety net for app teardown. We hide the system cursor system-wide during
+    // a hunt (CGDisplayHideCursor + "SetsCursorInBackground"); if the app quits
+    // mid-chase the matching CGDisplayShowCursor never runs and the user is left
+    // with no cursor until logout. AppDelegate calls this on terminate so a
+    // graceful quit always re-shows it. Idempotent — safe to call when nothing
+    // is hidden.
+    func restoreSystemCursorIfHidden() {
+        guard systemCursorHidden else {
+            return
+        }
+        CGDisplayShowCursor(CGMainDisplayID())
+        systemCursorHidden = false
     }
 
     // Walk the window toward the live cursor at a steady pace, re-reading the
