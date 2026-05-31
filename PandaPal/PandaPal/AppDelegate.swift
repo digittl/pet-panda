@@ -63,8 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Show/Hide Panda", action: #selector(togglePanda), keyEquivalent: "p"))
-        menu.addItem(NSMenuItem(title: "Pet Panda", action: #selector(petPanda), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Show/Hide Pet", action: #selector(togglePanda), keyEquivalent: "p"))
+        menu.addItem(NSMenuItem(title: "Pet", action: #selector(petPanda), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Wave Hello", action: #selector(waveHello), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Dance", action: #selector(danceNow), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Walk Now", action: #selector(walkNow), keyEquivalent: ""))
@@ -92,6 +92,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         genderItem.submenu = genderMenu
         menu.addItem(genderItem)
 
+        let petItem = NSMenuItem(title: "Pet Type", action: nil, keyEquivalent: "")
+        let petMenu = NSMenu()
+        for kind in PetKind.allCases {
+            let item = NSMenuItem(title: kind.label, action: #selector(setPetKind(_:)), keyEquivalent: "")
+            item.representedObject = kind.rawValue
+            petMenu.addItem(item)
+        }
+        petItem.submenu = petMenu
+        menu.addItem(petItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let checkForUpdates = NSMenuItem(
@@ -114,10 +124,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for item in genderMenu.items {
             item.target = self
         }
+        for item in petMenu.items {
+            item.target = self
+        }
 
         statusItem.menu = menu
         updateSizeMenuState(sizeMenu)
         updateGenderMenuState(genderMenu)
+        updatePetMenuState(petMenu)
+    }
+
+    private func updatePetMenuState(_ petMenu: NSMenu) {
+        let current = pandaWindowController?.viewModel.kind.rawValue
+            ?? UserDefaults.standard.string(forKey: "PandaPal.petKind")
+            ?? PetKind.panda.rawValue
+        for item in petMenu.items {
+            if let raw = item.representedObject as? String {
+                item.state = raw == current ? .on : .off
+            }
+        }
+    }
+
+    @objc private func setPetKind(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let kind = PetKind(rawValue: raw) else { return }
+        pandaWindowController?.setPetKind(kind)
+        if let petMenu = sender.menu {
+            updatePetMenuState(petMenu)
+        }
     }
 
     private func updateGenderMenuState(_ genderMenu: NSMenu) {

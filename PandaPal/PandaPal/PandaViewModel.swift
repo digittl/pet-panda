@@ -42,6 +42,27 @@ enum PandaGender: String, CaseIterable {
     }
 }
 
+// Which animal is currently on screen. The view-model is shared across all
+// kinds — each PetKind picks a different SwiftUI body to render but reads the
+// same eyes / mouth / arm-wave / drag state, so all the existing animations
+// translate directly. Pet-specific accessories (panda's bamboo + cushion,
+// turtle's shell retract, budgie's wings, puppy's tail) are layered on top.
+enum PetKind: String, CaseIterable {
+    case panda
+    case puppy
+    case turtle
+    case budgie
+
+    var label: String {
+        switch self {
+        case .panda: return "Panda"
+        case .puppy: return "Puppy"
+        case .turtle: return "Turtle"
+        case .budgie: return "Budgie"
+        }
+    }
+}
+
 enum MouthShape {
     case smile
     case open
@@ -113,6 +134,7 @@ final class PandaViewModel: ObservableObject {
     @Published var dragSway: Double = 0
     @Published var size: PandaSize = .medium
     @Published var gender: PandaGender = .girl
+    @Published var kind: PetKind = .panda
     @Published var sitting: Bool = false
     @Published var cushionVisible: Bool = false
     @Published var pawsInLap: Bool = false

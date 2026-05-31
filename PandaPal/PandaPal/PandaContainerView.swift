@@ -7,12 +7,22 @@ struct PandaContainerView: View {
     @State private var dragStartLocation: CGPoint?
     @State private var lastMouseLocation: CGPoint?
 
+    @ViewBuilder
+    private var petBody: some View {
+        switch viewModel.kind {
+        case .panda: PandaView(viewModel: viewModel)
+        case .puppy: PuppyView(viewModel: viewModel)
+        case .turtle: TurtleView(viewModel: viewModel)
+        case .budgie: BudgieView(viewModel: viewModel)
+        }
+    }
+
     var body: some View {
         ZStack {
             Color.clear.contentShape(Rectangle())
 
             ZStack {
-                PandaView(viewModel: viewModel)
+                petBody
                     .scaleEffect(viewModel.bounceScale)
                     .offset(y: viewModel.bodyOffsetY)
 
