@@ -9,11 +9,14 @@ struct PandaContainerView: View {
 
     @ViewBuilder
     private var petBody: some View {
-        switch viewModel.kind {
-        case .panda: PandaView(viewModel: viewModel)
-        case .puppy: PuppyView(viewModel: viewModel)
-        case .turtle: TurtleView(viewModel: viewModel)
-        case .budgie: BudgieView(viewModel: viewModel)
+        // Illustrated pets render from an image sprite; the rest are hand-drawn.
+        if let asset = viewModel.kind.spriteAsset {
+            PetSpriteView(viewModel: viewModel, assetName: asset)
+        } else {
+            switch viewModel.kind {
+            case .panda: PandaView(viewModel: viewModel)
+            case .puppy: PuppyView(viewModel: viewModel)
+            }
         }
     }
 

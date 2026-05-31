@@ -1,0 +1,15 @@
+{
+  "fps": 60,
+  "counts": {
+    "idle": 40,
+    "tail_wag": 40,
+    "head_tilt": 40,
+    "play_bow": 40,
+    "pounce": 40,
+    "happy_bounce": 40,
+    "paw_wave": 40,
+    "roll_over": 40,
+    "sleep": 40,
+    "excited_celebration": 40
+  }
+}

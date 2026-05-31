@@ -50,15 +50,41 @@ enum PandaGender: String, CaseIterable {
 enum PetKind: String, CaseIterable {
     case panda
     case puppy
-    case turtle
-    case budgie
 
     var label: String {
         switch self {
         case .panda: return "Panda"
         case .puppy: return "Puppy"
-        case .turtle: return "Turtle"
-        case .budgie: return "Budgie"
+        }
+    }
+
+    // The treat each pet hunts and munches. The panda keeps its hand-drawn
+    // bamboo stalk; the puppy rides a matching emoji during the chase and holds
+    // the same glyph while it eats, so the hunt + feast read right per species
+    // instead of every pet chasing bamboo.
+    var treatGlyph: String {
+        switch self {
+        case .panda: return "🎋"
+        case .puppy: return "🦴"
+        }
+    }
+
+    // Human-readable treat name, used to label the "Feed …" menu item per pet.
+    var treatName: String {
+        switch self {
+        case .panda: return "Bamboo"
+        case .puppy: return "Bone"
+        }
+    }
+
+    // Pets that render from an illustrated image sprite return its asset-catalog
+    // name; the procedural pets (drawn in code) return nil. PandaContainerView
+    // routes to PetSpriteView when this is non-nil, otherwise to the hand-drawn
+    // SwiftUI view. As each pet's art lands, flip it over here.
+    var spriteAsset: String? {
+        switch self {
+        case .puppy: return "puppy"
+        case .panda: return nil
         }
     }
 }
@@ -69,6 +95,17 @@ enum MouthShape {
     case grin
     case ohh
     case yawn
+}
+
+// A frame-animation clip for image-sprite pets. The raw value matches the
+// asset-catalog prefix (puppy_<rawValue>_<frame>), and the per-clip frame lists
+// live in PetSpriteView. Procedural (hand-drawn) pets ignore this entirely.
+enum PetClip: String {
+    case lookAround = "look_around"
+    case headTilt = "head_tilt"
+    case tailWag = "tail_wag"
+    case excitedJumping = "excited_jumping"
+    case layingDownWaiting = "laying_down_waiting"
 }
 
 enum PandaParticle: String, Identifiable {
@@ -134,8 +171,37 @@ final class PandaViewModel: ObservableObject {
     @Published var dragSway: Double = 0
     @Published var size: PandaSize = .medium
     @Published var gender: PandaGender = .girl
-    @Published var kind: PetKind = .panda
+    @Published var kind: PetKind = .panda {
+        didSet {
+            if kind != oldValue {
+                reconfigureForKind()
+            }
+        }
+    }
     @Published var sitting: Bool = false
+
+    // Image-sprite pets are driven by clips instead of the procedural knobs.
+    // spriteClip is the clip to play; bumping spriteClipNonce (re)triggers it
+    // even when the clip value is unchanged. PetSpriteView observes both.
+    @Published var spriteClip: PetClip = .lookAround
+    @Published var spriteClipNonce: Int = 0
+
+    var isSpritePet: Bool { kind.spriteAsset != nil }
+    private var spriteIdleTimer: Timer?
+
+    // Clips with finished art — frames extracted from the reference videos by
+    // PetSprites/extract_video_clips.sh (watermark + box border removed, white
+    // background flood-filled to transparency). Anything not in here falls back
+    // to a ready clip instead of rendering blank. Add clips here as their frames
+    // land in the asset catalog.
+    private let readyClips: Set<PetClip> = [.lookAround, .headTilt, .tailWag, .excitedJumping, .layingDownWaiting]
+
+    private func emitClip(_ clip: PetClip) {
+        // Only ever show finished/smooth clips; fall back to look-around (the calm
+        // resting clip) for any action whose art isn't ready yet.
+        spriteClip = readyClips.contains(clip) ? clip : .lookAround
+        spriteClipNonce += 1
+    }
     @Published var cushionVisible: Bool = false
     @Published var pawsInLap: Bool = false
     @Published var greetingWave: Bool = false
@@ -185,10 +251,116 @@ final class PandaViewModel: ObservableObject {
         activeTimers.removeAll()
     }
 
+    // Screenshot helpers (set in the environment):
+    //   PANDAPAL_FREEZE=1     → fully still: no idles, no wander (clean static shot)
+    //   PANDAPAL_FREEZE=idle  → stays put (no wander/hunt) but idle animations
+    //                            still play, so motion can be captured in place
+    private let freezeMode = ProcessInfo.processInfo.environment["PANDAPAL_FREEZE"]
+    private var fullyFrozen: Bool { freezeMode == "1" }
+    private var noWander: Bool { freezeMode == "1" || freezeMode == "idle" }
+
     init() {
-        scheduleNextIdle()
-        scheduleNextWander(initial: true)
-        scheduleNextBlink()
+        // kind is assigned by the controller after init, which fires
+        // reconfigureForKind() — so the correct director starts there. The panda
+        // default still needs its procedural loop kicked off here.
+        guard !fullyFrozen else { return }
+
+        if isSpritePet {
+            startSpriteDirector()
+        } else {
+            scheduleNextIdle()
+            scheduleNextBlink()
+            if !noWander {
+                scheduleNextWander(initial: true)
+            }
+        }
+    }
+
+    // Switch animation systems when the pet kind changes at runtime.
+    private func reconfigureForKind() {
+        cancelTimers()
+        spriteIdleTimer?.invalidate()
+        spriteIdleTimer = nil
+        isBusy = false
+
+        guard !fullyFrozen else {
+            emitClip(.lookAround)
+            return
+        }
+
+        if isSpritePet {
+            startSpriteDirector()
+        } else {
+            resetTransientState()
+            scheduleNextIdle()
+            scheduleNextBlink()
+            if !noWander {
+                scheduleNextWander(initial: true)
+            }
+        }
+    }
+
+    // MARK: - Sprite clip director (image-sprite pets)
+
+    private func startSpriteDirector() {
+        emitClip(.lookAround)
+        scheduleSpriteIdle()
+        // Autonomous wandering: the pet trots around the screen on its own (the
+        // tail_wag clip drives the walk), in addition to its in-place idle clips.
+        // Suppressed under PANDAPAL_FREEZE via the noWander guard inside.
+        scheduleSpriteWander(initial: true)
+    }
+
+    private func scheduleSpriteIdle() {
+        spriteIdleTimer?.invalidate()
+        let delay = Double.random(in: 5.0...9.0)
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
+            self?.spritePlayRandomIdle()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        spriteIdleTimer = timer
+    }
+
+    private func spritePlayRandomIdle() {
+        // Idle-appropriate clips only (pounce fires on the cursor chase, not at
+        // random), and only those that are finished/ready.
+        let idlePool: [PetClip] = [.lookAround, .lookAround, .headTilt, .tailWag, .layingDownWaiting]
+        let pool = idlePool.filter { readyClips.contains($0) }
+        emitClip(pool.randomElement() ?? .lookAround)
+        scheduleSpriteIdle()
+    }
+
+    private func scheduleSpriteWander(initial: Bool = false) {
+        guard !noWander else { return }
+        wanderTimer?.invalidate()
+        let delay = initial ? Double.random(in: 4.0...7.0) : Double.random(in: 14.0...22.0)
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
+            self?.spriteWander()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        wanderTimer = timer
+    }
+
+    private func spriteWander() {
+        guard let onWander = onWander else {
+            scheduleSpriteWander()
+            return
+        }
+
+        let dx = CGFloat.random(in: -300...300)
+        let dy = CGFloat.random(in: -130...130)
+        let duration = Double.random(in: 3.0...4.2)
+
+        // Face travel direction (the puppy art faces left; mirror to go right).
+        walkDirection = dx >= 0 ? -1 : 1
+        emitClip(.tailWag)
+        onWander(dx, dy, duration)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.2) { [weak self] in
+            guard let self = self else { return }
+            self.emitClip(.lookAround)
+            self.scheduleSpriteWander()
+        }
     }
 
     deinit {
@@ -200,6 +372,12 @@ final class PandaViewModel: ObservableObject {
     // MARK: - Public interactions
 
     func pat() {
+        if isSpritePet {
+            // A tap wakes a sleeping pup, otherwise it's a happy celebration.
+            emitClip(spriteClip == .layingDownWaiting ? .lookAround : .excitedJumping)
+            return
+        }
+
         // A tap while she's resting on the cushion startles her awake instead
         // of running a normal pat reaction.
         if isResting || sitting || cushionVisible {
@@ -259,6 +437,10 @@ final class PandaViewModel: ObservableObject {
     }
 
     func feedBamboo() {
+        if isSpritePet {
+            emitClip(.excitedJumping)
+            return
+        }
         guard !isDragging else { return }
         cancelTimers()
         resetTransientState()
@@ -267,6 +449,10 @@ final class PandaViewModel: ObservableObject {
     }
 
     func waveHello() {
+        if isSpritePet {
+            emitClip(.excitedJumping)
+            return
+        }
         guard !isDragging else { return }
         cancelTimers()
         resetTransientState()
@@ -275,6 +461,10 @@ final class PandaViewModel: ObservableObject {
     }
 
     func danceNow() {
+        if isSpritePet {
+            emitClip(.excitedJumping)
+            return
+        }
         guard !isDragging else { return }
         cancelTimers()
         resetTransientState()
@@ -443,6 +633,8 @@ final class PandaViewModel: ObservableObject {
     }
 
     private func scheduleNextWander(initial: Bool = false) {
+        guard !noWander else { return }
+
         wanderTimer?.invalidate()
         // Roam more often than the original 8...16s, but not constantly.
         let delay = initial ? Double.random(in: 1.5...3.0) : Double.random(in: 6...12)
@@ -475,6 +667,10 @@ final class PandaViewModel: ObservableObject {
     }
 
     func forceWander() {
+        if isSpritePet {
+            spriteWander()
+            return
+        }
         wander()
     }
 
@@ -485,6 +681,8 @@ final class PandaViewModel: ObservableObject {
         wanderTimer = nil
         chaseWalkTimer?.invalidate()
         chaseWalkTimer = nil
+        spriteIdleTimer?.invalidate()
+        spriteIdleTimer = nil
         stopDragFlail()
         cancelActiveTimers()
     }
@@ -744,6 +942,14 @@ final class PandaViewModel: ObservableObject {
     // MARK: - Chase the cursor
 
     private func chaseMouse() {
+        if isSpritePet {
+            guard let onChaseStart = onChaseStart else { return }
+            // Trot after the cursor; the pounce clip fires on the catch.
+            emitClip(.tailWag)
+            onChaseStart()
+            return
+        }
+
         // Don't interrupt a drag — try again later.
         if isDragging {
             scheduleNextWander()
@@ -811,6 +1017,11 @@ final class PandaViewModel: ObservableObject {
 
     // Called by the controller once she's on top of the cursor — the pounce.
     func catchPrey() {
+        if isSpritePet {
+            emitClip(.excitedJumping)
+            scheduleSpriteWander()
+            return
+        }
         chaseWalkTimer?.invalidate()
         chaseWalkTimer = nil
         playPounce()

@@ -23,6 +23,9 @@ final class PandaWindowController: NSWindowController {
     private let kindKey = "PandaPal.petKind"
     let viewModel = PandaViewModel()
 
+    // Set by AppDelegate: routes a right-click on the pet to the shared menu.
+    var onContextMenuRequested: ((NSEvent) -> Void)?
+
     private var pandaSize: NSSize {
         let m = viewModel.size.multiplier
         return NSSize(width: baseSize.width * m, height: baseSize.height * m)
@@ -207,11 +210,15 @@ final class PandaWindowController: NSWindowController {
             // chasing, right up until she catches it.
             panel.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-
-            let host = NSHostingView(rootView: BambooCursorView())
-            host.frame = NSRect(origin: .zero, size: size)
-            panel.contentView = host
             bambooCursorWindow = panel
+        }
+
+        // Rebuild the cursor content each hunt so it matches the current pet —
+        // the panda chases its drawn bamboo, the others their own treat emoji.
+        if let panel = bambooCursorWindow {
+            let host = NSHostingView(rootView: ChaseTreatCursorView(kind: viewModel.kind))
+            host.frame = NSRect(origin: .zero, size: panel.frame.size)
+            panel.contentView = host
         }
 
         moveBambooCursorToMouse()
@@ -467,107 +474,25 @@ final class PandaWindowController: NSWindowController {
         window?.orderFrontRegardless()
     }
 
+    // AppDelegate owns the single menu definition and pops it up here, so the
+    // right-click menu is always identical to the menu-bar one.
     private func showContextMenu(for event: NSEvent) {
-        guard let view = window?.contentView else { return }
-        let menu = NSMenu()
-
-        let pet = NSMenuItem(title: "Pet", action: #selector(menuPet), keyEquivalent: "")
-        pet.target = self
-        menu.addItem(pet)
-
-        let wave = NSMenuItem(title: "Wave Hello", action: #selector(menuWave), keyEquivalent: "")
-        wave.target = self
-        menu.addItem(wave)
-
-        let dance = NSMenuItem(title: "Dance", action: #selector(menuDance), keyEquivalent: "")
-        dance.target = self
-        menu.addItem(dance)
-
-        let walk = NSMenuItem(title: "Walk", action: #selector(menuWalk), keyEquivalent: "")
-        walk.target = self
-        menu.addItem(walk)
-
-        let chase = NSMenuItem(title: "Chase", action: #selector(menuChase), keyEquivalent: "")
-        chase.target = self
-        menu.addItem(chase)
-
-        let feed = NSMenuItem(title: "Feed", action: #selector(menuFeed), keyEquivalent: "")
-        feed.target = self
-        menu.addItem(feed)
-
-        menu.addItem(NSMenuItem.separator())
-
-        let sizeItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
-        let sizeMenu = NSMenu()
-        for size in PandaSize.allCases {
-            let item = NSMenuItem(title: size.label, action: #selector(menuSize(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = size.rawValue
-            item.state = viewModel.size == size ? .on : .off
-            sizeMenu.addItem(item)
-        }
-        sizeItem.submenu = sizeMenu
-        menu.addItem(sizeItem)
-
-        let genderItem = NSMenuItem(title: "Gender", action: nil, keyEquivalent: "")
-        let genderMenu = NSMenu()
-        for gender in PandaGender.allCases {
-            let item = NSMenuItem(title: gender.label, action: #selector(menuGender(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = gender.rawValue
-            item.state = viewModel.gender == gender ? .on : .off
-            genderMenu.addItem(item)
-        }
-        genderItem.submenu = genderMenu
-        menu.addItem(genderItem)
-
-        NSMenu.popUpContextMenu(menu, with: event, for: view)
-    }
-
-    @objc private func menuGender(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let gender = PandaGender(rawValue: raw) else { return }
-        setGender(gender)
-    }
-
-    @objc private func menuPet() {
-        viewModel.pet()
-    }
-
-    @objc private func menuWave() {
-        viewModel.waveHello()
-    }
-
-    @objc private func menuDance() {
-        viewModel.danceNow()
-    }
-
-    @objc private func menuWalk() {
-        viewModel.forceWander()
-    }
-
-    @objc private func menuChase() {
-        viewModel.chaseNow()
-    }
-
-    @objc private func menuFeed() {
-        viewModel.feedBamboo()
-    }
-
-    @objc private func menuSize(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let size = PandaSize(rawValue: raw) else { return }
-        setSize(size)
+        onContextMenuRequested?(event)
     }
 }
 
-// The bamboo that replaces the cursor while she hunts — the exact same drawn
-// BambooStick she holds and eats, not an emoji, so it matches the rest of the
-// art. Pops in with a little spring and sways gently like a living stalk.
-struct BambooCursorView: View {
+// The treat that replaces the cursor while a pet hunts. The panda chases its
+// hand-drawn BambooStick (matches the rest of its art); the puppy/turtle/budgie
+// chase their own treat emoji. Pops in with a little spring and sways gently
+// like a living thing, then freezes where the pet pounces.
+struct ChaseTreatCursorView: View {
+    let kind: PetKind
+
     @State private var appeared = false
     @State private var sway = false
 
     var body: some View {
-        BambooStick()
+        treat
             .scaleEffect(appeared ? 0.9 : 0.2)
             .rotationEffect(.degrees(sway ? 6 : -6))
             .shadow(color: Color.black.opacity(0.28), radius: 2, x: 0, y: 1)
@@ -579,6 +504,16 @@ struct BambooCursorView: View {
                     sway = true
                 }
             }
+    }
+
+    @ViewBuilder
+    private var treat: some View {
+        if kind == .panda {
+            BambooStick()
+        } else {
+            Text(kind.treatGlyph)
+                .font(.system(size: 34))
+        }
     }
 }
 
