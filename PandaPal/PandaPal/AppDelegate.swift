@@ -2,7 +2,16 @@ import AppKit
 import Sparkle
 import SwiftUI
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+/// App entry point and the single source of truth for the pet's menu.
+///
+/// One `populateMenu(_:)` builds the complete command list (actions, Size /
+/// Gender / Pet Type submenus, updates, quit). It feeds both surfaces so they
+/// can never drift apart:
+///   • the menu-bar status item — re-populated on every open via NSMenuDelegate
+///     so its checkmarks always reflect live state, and
+///   • the right-click context menu on the pet itself — built fresh per click
+///     by `presentContextMenu(_:)`, which PandaWindowController routes to.
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var pandaWindowController: PandaWindowController?
     private let updaterController = SPUStandardUpdaterController(
@@ -54,6 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Menu construction
+
     private func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
@@ -63,46 +74,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Show/Hide Pet", action: #selector(togglePanda), keyEquivalent: "p"))
-        menu.addItem(NSMenuItem(title: "Pet", action: #selector(petPanda), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Wave Hello", action: #selector(waveHello), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Dance", action: #selector(danceNow), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Walk Now", action: #selector(walkNow), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Chase Cursor", action: #selector(chaseNow), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Feed Bamboo", action: #selector(feedBamboo), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Reset Position", action: #selector(resetPosition), keyEquivalent: "r"))
+        menu.delegate = self
+        statusItem.menu = menu
+    }
 
-        let sizeItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
-        let sizeMenu = NSMenu()
-        for size in PandaSize.allCases {
-            let item = NSMenuItem(title: size.label, action: #selector(setSize(_:)), keyEquivalent: "")
-            item.representedObject = size.rawValue
-            sizeMenu.addItem(item)
-        }
-        sizeItem.submenu = sizeMenu
-        menu.addItem(sizeItem)
+    // NSMenuDelegate: rebuild the status-bar menu right before it opens so the
+    // Size / Gender / Pet Type checkmarks always match current state.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === statusItem?.menu else { return }
+        populateMenu(menu)
+    }
 
-        let genderItem = NSMenuItem(title: "Gender", action: nil, keyEquivalent: "")
-        let genderMenu = NSMenu()
-        for gender in PandaGender.allCases {
-            let item = NSMenuItem(title: gender.label, action: #selector(setGender(_:)), keyEquivalent: "")
-            item.representedObject = gender.rawValue
-            genderMenu.addItem(item)
-        }
-        genderItem.submenu = genderMenu
-        menu.addItem(genderItem)
+    // The one definition of the pet's full command set. Both the status-bar
+    // menu and the right-click menu are built from this, so they stay in sync.
+    private func populateMenu(_ menu: NSMenu) {
+        menu.removeAllItems()
 
-        let petItem = NSMenuItem(title: "Pet Type", action: nil, keyEquivalent: "")
-        let petMenu = NSMenu()
-        for kind in PetKind.allCases {
-            let item = NSMenuItem(title: kind.label, action: #selector(setPetKind(_:)), keyEquivalent: "")
-            item.representedObject = kind.rawValue
-            petMenu.addItem(item)
-        }
-        petItem.submenu = petMenu
-        menu.addItem(petItem)
+        addAction(to: menu, title: "Show/Hide Pet", action: #selector(togglePanda), key: "p")
+        addAction(to: menu, title: "Pet", action: #selector(petPanda))
+        addAction(to: menu, title: "Wave Hello", action: #selector(waveHello))
+        addAction(to: menu, title: "Dance", action: #selector(danceNow))
+        addAction(to: menu, title: "Walk Now", action: #selector(walkNow))
+        addAction(to: menu, title: "Chase Cursor", action: #selector(chaseNow))
+        addAction(to: menu, title: "Feed \(currentKind.treatName)", action: #selector(feedBamboo))
+        addAction(to: menu, title: "Reset Position", action: #selector(resetPosition), key: "r")
 
-        menu.addItem(NSMenuItem.separator())
+        menu.addItem(.separator())
+
+        menu.addItem(submenuItem(title: "Size", values: PandaSize.allCases.map { ($0.label, $0.rawValue) },
+                                 current: currentSize.rawValue, action: #selector(setSize(_:))))
+        menu.addItem(submenuItem(title: "Gender", values: PandaGender.allCases.map { ($0.label, $0.rawValue) },
+                                 current: currentGender.rawValue, action: #selector(setGender(_:))))
+        menu.addItem(submenuItem(title: "Pet Type", values: PetKind.allCases.map { ($0.label, $0.rawValue) },
+                                 current: currentKind.rawValue, action: #selector(setPetKind(_:))))
+
+        menu.addItem(.separator())
 
         let checkForUpdates = NSMenuItem(
             title: "Check for Updates…",
@@ -112,89 +118,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         checkForUpdates.target = updaterController
         menu.addItem(checkForUpdates)
 
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q"))
+        menu.addItem(.separator())
+        addAction(to: menu, title: "Quit", action: #selector(quitApp), key: "q")
+    }
 
-        for item in menu.items where item.target == nil && item.action != nil {
+    private func addAction(to menu: NSMenu, title: String, action: Selector, key: String = "") {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.target = self
+        menu.addItem(item)
+    }
+
+    // Build a checkmarked submenu from (label, rawValue) pairs. The raw value
+    // rides on representedObject so the @objc handler can decode the choice.
+    private func submenuItem(title: String, values: [(String, String)], current: String, action: Selector) -> NSMenuItem {
+        let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+
+        for (label, raw) in values {
+            let item = NSMenuItem(title: label, action: action, keyEquivalent: "")
             item.target = self
-        }
-        for item in sizeMenu.items {
-            item.target = self
-        }
-        for item in genderMenu.items {
-            item.target = self
-        }
-        for item in petMenu.items {
-            item.target = self
+            item.representedObject = raw
+            item.state = raw == current ? .on : .off
+            submenu.addItem(item)
         }
 
-        statusItem.menu = menu
-        updateSizeMenuState(sizeMenu)
-        updateGenderMenuState(genderMenu)
-        updatePetMenuState(petMenu)
+        parent.submenu = submenu
+        return parent
     }
 
-    private func updatePetMenuState(_ petMenu: NSMenu) {
-        let current = pandaWindowController?.viewModel.kind.rawValue
-            ?? UserDefaults.standard.string(forKey: "PandaPal.petKind")
-            ?? PetKind.panda.rawValue
-        for item in petMenu.items {
-            if let raw = item.representedObject as? String {
-                item.state = raw == current ? .on : .off
-            }
-        }
+    // Current state, falling back to persisted defaults before the window
+    // controller exists (the menu can be built during launch).
+    private var currentSize: PandaSize {
+        pandaWindowController?.viewModel.size
+            ?? UserDefaults.standard.string(forKey: "PandaPal.size").flatMap(PandaSize.init(rawValue:))
+            ?? .medium
     }
 
-    @objc private func setPetKind(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let kind = PetKind(rawValue: raw) else { return }
-        pandaWindowController?.setPetKind(kind)
-        if let petMenu = sender.menu {
-            updatePetMenuState(petMenu)
-        }
+    private var currentGender: PandaGender {
+        pandaWindowController?.viewModel.gender
+            ?? UserDefaults.standard.string(forKey: "PandaPal.gender").flatMap(PandaGender.init(rawValue:))
+            ?? .girl
     }
 
-    private func updateGenderMenuState(_ genderMenu: NSMenu) {
-        let current = pandaWindowController?.viewModel.gender.rawValue
-            ?? UserDefaults.standard.string(forKey: "PandaPal.gender")
-            ?? PandaGender.girl.rawValue
-        for item in genderMenu.items {
-            if let raw = item.representedObject as? String {
-                item.state = raw == current ? .on : .off
-            }
-        }
+    private var currentKind: PetKind {
+        pandaWindowController?.viewModel.kind
+            ?? UserDefaults.standard.string(forKey: "PandaPal.petKind").flatMap(PetKind.init(rawValue:))
+            ?? .panda
     }
 
-    @objc private func setGender(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let gender = PandaGender(rawValue: raw) else { return }
-        pandaWindowController?.setGender(gender)
-        if let genderMenu = sender.menu {
-            updateGenderMenuState(genderMenu)
-        }
+    // Pop the full menu up wherever the pet was right-clicked. Built fresh so
+    // its checkmarks reflect the moment it opens.
+    private func presentContextMenu(_ event: NSEvent) {
+        guard let view = pandaWindowController?.window?.contentView else { return }
+        let menu = NSMenu()
+        populateMenu(menu)
+        NSMenu.popUpContextMenu(menu, with: event, for: view)
     }
 
-    private func updateSizeMenuState(_ sizeMenu: NSMenu) {
-        let current = pandaWindowController?.viewModel.size.rawValue
-            ?? UserDefaults.standard.string(forKey: "PandaPal.size")
-            ?? PandaSize.medium.rawValue
-        for item in sizeMenu.items {
-            if let raw = item.representedObject as? String {
-                item.state = raw == current ? .on : .off
-            }
-        }
-    }
-
-    @objc private func setSize(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let size = PandaSize(rawValue: raw) else { return }
-        pandaWindowController?.setSize(size)
-        if let sizeMenu = sender.menu {
-            updateSizeMenuState(sizeMenu)
-        }
-    }
+    // MARK: - Window lifecycle
 
     private func showPanda() {
         if pandaWindowController == nil {
             pandaWindowController = PandaWindowController()
         }
+
+        pandaWindowController?.onContextMenuRequested = { [weak self] event in
+            self?.presentContextMenu(event)
+        }
+
         pandaWindowController?.showWindow(nil)
     }
 
@@ -203,12 +194,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showPanda()
             return
         }
+
         if controller.window?.isVisible == true {
             controller.window?.orderOut(nil)
         } else {
             controller.showWindow(nil)
         }
     }
+
+    // MARK: - Menu actions
 
     @objc private func resetPosition() {
         pandaWindowController?.resetPosition()
@@ -236,6 +230,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func feedBamboo() {
         pandaWindowController?.viewModel.feedBamboo()
+    }
+
+    @objc private func setSize(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let size = PandaSize(rawValue: raw) else { return }
+        pandaWindowController?.setSize(size)
+    }
+
+    @objc private func setGender(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let gender = PandaGender(rawValue: raw) else { return }
+        pandaWindowController?.setGender(gender)
+    }
+
+    @objc private func setPetKind(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let kind = PetKind(rawValue: raw) else { return }
+        pandaWindowController?.setPetKind(kind)
     }
 
     @objc private func quitApp() {
